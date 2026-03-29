@@ -2,104 +2,238 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v1.3</title>
+    <title>Fixed Prism & Metaball Sandbox</title>
     <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
-        #ver { position: absolute; top: 10px; left: 10px; color: #fff; opacity: 0.3; font-size: 10px; z-index: 5; pointer-events: none; }
-        #cvs-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
-        canvas { display: block; width: 100%; height: 100%; }
-        #ui { 
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(10, 10, 10, 0.96); color: #eee; 
-            padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
-            border-top: 1px solid #444; z-index: 10; backdrop-filter: blur(15px);
-        }
-        .tabs { display: flex; gap: 1px; margin-bottom: 4px; background: #222; border-radius: 4px; overflow: hidden; }
-        .tab-btn { flex: 1; padding: 6px; font-size: 9px; background: transparent; border: none; color: #666; cursor: pointer; }
-        .tab-btn.active { background: #333; color: #0af; font-weight: bold; }
-        .tab-content { display: none; grid-template-columns: 1fr 1fr; gap: 2px 10px; padding: 2px 0; max-height: 180px; overflow-y: auto; }
-        .tab-content.active { display: grid; }
-        .btns { grid-column: span 2; display: flex; gap: 5px; justify-content: center; padding: 4px 0; border-bottom: 1px solid #222; margin-bottom: 4px; }
-        button.action { background: #333; border: 1px solid #555; border-radius: 4px; width: 32px; height: 26px; font-size: 14px; color: #fff; }
-        .ctrl { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 4px; }
-        label { font-size: 8px; color: #888; text-align: right; font-weight: bold; white-space: nowrap; }
-        input[type=range] { width: 100%; height: 18px; accent-color: #0af; margin: 0; }
+        body { margin: 0; overflow: hidden; background: #000; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-<div id="ver">ver 1.3</div>
-<div id="cvs-wrap"><canvas id="cvs"></canvas></div>
-<div id="ui">
-    <div class="btns">
-        <button class="action" onclick="cycleColor()">🎨</button>
-        <button class="action" onclick="cycleBranchPreset()">🌿</button>
-        <button class="action" onclick="gacha()">🎲</button>
-        <button class="action" onclick="savePNG()">💾</button>
-        <button class="action" onclick="init()">🔄</button>
-    </div>
-    <div class="tabs">
-        <button class="tab-btn active" onclick="showTab('basic')">BASIC</button>
-        <button class="tab-btn" onclick="showTab('growth')">GROWTH</button>
-        <button class="tab-btn" onclick="showTab('curve')">CURVE</button>
-    </div>
-
-    <div id="basic" class="tab-content active">
-        <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0.1" max="10" step="0.1" value="4"></div>
-        <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="25" value="8" oninput="init()"></div>
-        <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-0.06" max="0.06" step="0.001" value="0" oninput="init()"></div>
-        <div class="ctrl"><label>GROW_S</label><input type="range" id="mGrowS" min="0" max="1" step="0.01" value="0.3" oninput="sync('gs')"></div>
-        <div class="ctrl"><label>GROW_R</label><input type="range" id="mGrowR" min="0" max="1" step="0.01" value="0.3" oninput="sync('gr')"></div>
-        <div class="ctrl"><label>CURVE_S</label><input type="range" id="mCurveS" min="0" max="1" step="0.01" value="0.4" oninput="sync('cs')"></div>
-        <div class="ctrl"><label>CURVE_R</label><input type="range" id="mCurveR" min="0" max="1" step="0.01" value="0.4" oninput="sync('cr')"></div>
-    </div>
-
-    <div id="growth" class="tab-content">
-        <div class="ctrl"><label>LEN_B</label><input type="range" id="lenB" min="5" max="100" value="30" oninput="init()"></div>
-        <div class="ctrl"><label>LEN_V</label><input type="range" id="lenV" min="0" max="100" value="20" oninput="init()"></div>
-        <div class="ctrl"><label>GEN_B</label><input type="range" id="genB" min="4" max="15" step="0.1" value="8" oninput="init()"></div>
-        <div class="ctrl"><label>GEN_V</label><input type="range" id="genV" min="0" max="5" step="0.1" value="1" oninput="init()"></div>
-        <div class="ctrl"><label>DTH_B</label><input type="range" id="deathB" min="0" max="0.5" step="0.01" value="0.05" oninput="init()"></div>
-        <div class="ctrl"><label>DTH_V</label><input type="range" id="deathV" min="0" max="0.5" step="0.01" value="0.1" oninput="init()"></div>
-        <div class="ctrl"><label>GRV_B</label><input type="range" id="gravB" min="-0.3" max="0.3" step="0.01" value="0.02" oninput="init()"></div>
-        <div class="ctrl"><label>GRV_V</label><input type="range" id="gravV" min="0" max="0.2" step="0.01" value="0.02" oninput="init()"></div>
-    </div>
-
-    <div id="curve" class="tab-content">
-        <div class="ctrl"><label>ANG_B</label><input type="range" id="angleB" min="0.1" max="2.5" step="0.1" value="0.8" oninput="init()"></div>
-        <div class="ctrl"><label>ANG_V</label><input type="range" id="angleV" min="0" max="1.5" step="0.1" value="0.4" oninput="init()"></div>
-        <div class="ctrl"><label>AVD_B</label><input type="range" id="avoidB" min="0" max="120" value="30" oninput="init()"></div>
-        <div class="ctrl"><label>AVD_V</label><input type="range" id="avoidV" min="0" max="60" value="15" oninput="init()"></div>
-    </div>
-</div>
-
-<script>
-const canvas = document.getElementById('cvs'), ctx = canvas.getContext('2d');
-const ui = {}; document.querySelectorAll('input').forEach(el => ui[el.id] = el);
-let width, height, dpr, branches = [], grid = {}, swipePos = null, swipeForce = 0, hue = -1;
-const cellSize = 60, colors = [-1, 140, 200, 280, 45, 10, 180, 310];
-
-class Branch {
-    constructor(x, y, vx, vy, gen) {
-        this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.gen = gen; this.age = 0; this.active = true;
-        this.history = [{x, y}];
-        const rv = () => Math.random() - 0.5;
-        this.maxL = Math.max(1, parseFloat(ui.lenB.value) + rv() * 2 * parseFloat(ui.lenV.value));
-        this.gEff = parseFloat(ui.gravB.value) + rv() * 2 * parseFloat(ui.gravV.value);
-        this.dProb = Math.max(0, parseFloat(ui.deathB.value) + rv() * 2 * parseFloat(ui.deathV.value));
-        this.avD = Math.max(0, parseFloat(ui.avoidB.value) + rv() * 2 * parseFloat(ui.avoidV.value));
-        const limitGen = parseFloat(ui.genB.value) + rv() * 2 * parseFloat(ui.genV.value);
-        if (this.gen >= Math.floor(limitGen)) {
-            this.maxL *= Math.max(0.01, limitGen - Math.floor(limitGen));
-            if (this.maxL < 0.5) this.active = false;
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
-    }
+    </script>
 
-    update() {
-        if (!this.active) return;
-        const m = 60;
-        if (this.x < -m || this.x > width/dpr+m || this.y < -m || this.y > height/dpr+m) { this.active = false; return; }
+    <script type="module">
+        import * as THREE from 'three';
+        import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+        const vertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            uniform float u_ior;
+            uniform float u_dispersion;
+            uniform float u_smoothness;
+            uniform float u_shapeMix;
+            varying vec2 vUv;
+
+            // 背景の模様（屈折を確認しやすくするため）
+            vec3 getBackground(vec3 rd) {
+                float grid = sin(rd.x * 10.0) * sin(rd.y * 10.0) * sin(rd.z * 10.0);
+                grid = smoothstep(0.7, 0.8, grid);
+                vec3 col = mix(vec3(0.05, 0.05, 0.1), vec3(0.2, 0.4, 0.8), grid);
+                return col;
+            }
+
+            float sdSphere(vec3 p, float s) { return length(p) - s; }
+            float sdBox(vec3 p, vec3 b) {
+                vec3 q = abs(p) - b;
+                return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+            }
+
+            float smin(float a, float b, float k) {
+                float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+                return mix(b, a, h) - k * h * (1.0 - h);
+            }
+
+            float getDist(vec3 p) {
+                float s = sin(u_time * 0.3), c = cos(u_time * 0.3);
+                mat2 rot = mat2(c, -s, s, c);
+                p.xz *= rot;
+                p.xy *= rot;
+
+                float box = sdBox(p, vec3(0.5));
+                
+                float m1 = sdSphere(p - vec3(sin(u_time)*0.4, cos(u_time*0.7)*0.4, 0.), 0.35);
+                float m2 = sdSphere(p - vec3(cos(u_time*0.8)*0.4, sin(u_time)*0.4, 0.), 0.35);
+                float metaballs = smin(m1, m2, u_smoothness);
+
+                return mix(box, metaballs, u_shapeMix);
+            }
+
+            vec3 getNormal(vec3 p) {
+                vec2 e = vec2(0.001, 0);
+                return normalize(vec3(
+                    getDist(p + e.xyy) - getDist(p - e.xyy),
+                    getDist(p + e.yxy) - getDist(p - e.yxy),
+                    getDist(p + e.yyx) - getDist(p - e.yyx)
+                ));
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
+                vec3 ro = vec3(0, 0, -2.5); // Camera Position
+                vec3 rd = normalize(vec3(uv, 1.0)); // Ray Direction
+
+                vec3 color = getBackground(rd); // Default Background
+
+                float dO = 0.0;
+                for(int i=0; i<80; i++) {
+                    vec3 p = ro + rd * dO;
+                    float dS = getDist(p);
+                    if(dS < 0.001 || dO > 10.0) break;
+                    dO += dS;
+                }
+
+                if(dO < 10.0) {
+                    vec3 p = ro + rd * dO;
+                    vec3 n = getNormal(p);
+                    
+                    // --- Dispersion (RGB屈折) ---
+                    vec3 col;
+                    float iorR = u_ior + u_dispersion;
+                    float iorG = u_ior;
+                    float iorB = u_ior - u_dispersion;
+
+                    vec3 refrR = refract(rd, n, 1.0/iorR);
+                    vec3 refrG = refract(rd, n, 1.0/iorG);
+                    vec3 refrB = refract(rd, n, 1.0/iorB);
+
+                    // 屈折した先の背景色を取得
+                    col.r = getBackground(refrR).r;
+                    col.g = getBackground(refrG).g;
+                    col.b = getBackground(refrB).b;
+
+                    // ライティング: スペキュラとフレネル
+                    float diffuse = dot(n, normalize(vec3(1,2,-3))) * 0.5 + 0.5;
+                    float fresnel = pow(1.0 + dot(rd, n), 5.0);
+                    
+                    color = col * diffuse + fresnel * 0.5;
+                }
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // --- Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const uniforms = {
+            u_time: { value: 0 },
+            u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            u_ior: { value: 1.45 },
+            u_dispersion: { value: 0.08 },
+            u_smoothness: { value: 0.35 },
+            u_shapeMix: { value: 0.0 }
+        };
+
+        const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        // --- UI ---
+        const gui = new GUI();
+        gui.add(uniforms.u_ior, 'value', 1.0, 2.5).name('屈折率 (IOR)');
+        gui.add(uniforms.u_dispersion, 'value', 0.0, 0.2).name('分光(虹色)強度');
+        gui.add(uniforms.u_smoothness, 'value', 0.1, 0.8).name('メタボール粘度');
+        gui.add(uniforms.u_shapeMix, 'value', 0, 1).name('形状切替(Box-Meta)');
+
+        function animate(time) {
+            uniforms.u_time.value = time * 0.001;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+        });
+        animate();
+    </script>
+</body>
+</html>
+                    vec3 col;
+                    float iorR = u_ior + u_dispersion;
+                    float iorG = u_ior;
+                    float iorB = u_ior - u_dispersion;
+
+                    vec3 refrR = refract(rd, n, 1.0/iorR);
+                    vec3 refrG = refract(rd, n, 1.0/iorG);
+                    vec3 refrB = refract(rd, n, 1.0/iorB);
+
+                    // 屈折した先の背景色を取得
+                    col.r = getBackground(refrR).r;
+                    col.g = getBackground(refrG).g;
+                    col.b = getBackground(refrB).b;
+
+                    // ライティング: スペキュラとフレネル
+                    float diffuse = dot(n, normalize(vec3(1,2,-3))) * 0.5 + 0.5;
+                    float fresnel = pow(1.0 + dot(rd, n), 5.0);
+                    
+                    color = col * diffuse + fresnel * 0.5;
+                }
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // --- Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const uniforms = {
+            u_time: { value: 0 },
+            u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            u_ior: { value: 1.45 },
+            u_dispersion: { value: 0.08 },
+            u_smoothness: { value: 0.35 },
+            u_shapeMix: { value: 0.0 }
+        };
+
+        const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+
+        // --- UI ---
+        const gui = new GUI();
+        gui.add(uniforms.u_ior, 'value', 1.0, 2.5).name('屈折率 (IOR)');
+        gui.add(uniforms.u_dispersion, 'value', 0.0, 0.2).name('分光(虹色)強度');
+        gui.add(uniforms.u_smoothness, 'value', 0.1, 0.8).name('メタボール粘度');
+        gui.add(uniforms.u_shapeMix, 'value', 0, 1).name('形状切替(Box-Meta)');
+
+        function animate(time) {
+            uniforms.u_time.value = time * 0.001;
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+        });
+        animate();
+    </script>
+</body>
+</html>
 
         let ax = 0, ay = 0;
         const gx = Math.floor(this.x / cellSize), gy = Math.floor(this.y / cellSize);
