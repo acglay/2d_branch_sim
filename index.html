@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v1.0</title>
+    <title>2D Branching Sandbox v1.1</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -19,17 +19,17 @@
         .tabs { display: flex; gap: 1px; margin-bottom: 4px; background: #222; border-radius: 4px; overflow: hidden; }
         .tab-btn { flex: 1; padding: 6px; font-size: 9px; background: transparent; border: none; color: #666; cursor: pointer; }
         .tab-btn.active { background: #333; color: #0af; font-weight: bold; }
-        .tab-content { display: none; grid-template-columns: 1fr 1fr; gap: 2px 10px; padding: 2px 0; max-height: 160px; overflow-y: auto; }
+        .tab-content { display: none; grid-template-columns: 1fr 1fr; gap: 2px 10px; padding: 2px 0; max-height: 180px; overflow-y: auto; }
         .tab-content.active { display: grid; }
         .btns { grid-column: span 2; display: flex; gap: 5px; justify-content: center; padding: 4px 0; border-bottom: 1px solid #222; margin-bottom: 4px; }
         button.action { background: #333; border: 1px solid #555; border-radius: 4px; width: 32px; height: 26px; font-size: 14px; color: #fff; }
-        .ctrl { display: grid; grid-template-columns: 50px 1fr; align-items: center; gap: 4px; }
+        .ctrl { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 4px; }
         label { font-size: 8px; color: #888; text-align: right; font-weight: bold; white-space: nowrap; }
         input[type=range] { width: 100%; height: 18px; accent-color: #0af; margin: 0; }
     </style>
 </head>
 <body>
-<div id="ver">ver 1.0</div>
+<div id="ver">ver 1.1</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
@@ -48,6 +48,7 @@
     <div id="basic" class="tab-content active">
         <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0.1" max="10" step="0.1" value="4"></div>
         <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="25" value="8" oninput="init()"></div>
+        <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-1" max="1" step="0.01" value="0"></div>
         <div class="ctrl"><label>GROW_S</label><input type="range" id="mGrowS" min="0" max="1" step="0.01" value="0.3" oninput="sync('gs')"></div>
         <div class="ctrl"><label>GROW_R</label><input type="range" id="mGrowR" min="0" max="1" step="0.01" value="0.3" oninput="sync('gr')"></div>
         <div class="ctrl"><label>CURVE_S</label><input type="range" id="mCurveS" min="0" max="1" step="0.01" value="0.4" oninput="sync('cs')"></div>
@@ -70,8 +71,6 @@
         <div class="ctrl"><label>ANG_V</label><input type="range" id="angleV" min="0" max="1.5" step="0.1" value="0.4" oninput="init()"></div>
         <div class="ctrl"><label>AVD_B</label><input type="range" id="avoidB" min="0" max="120" value="30" oninput="init()"></div>
         <div class="ctrl"><label>AVD_V</label><input type="range" id="avoidV" min="0" max="60" value="15" oninput="init()"></div>
-        <div class="ctrl"><label>WND_B</label><input type="range" id="windB" min="-0.5" max="0.5" step="0.01" value="0" oninput="init()"></div>
-        <div class="ctrl"><label>WND_V</label><input type="range" id="windV" min="0" max="0.5" step="0.01" value="0.1" oninput="init()"></div>
     </div>
 </div>
 
@@ -85,16 +84,11 @@ class Branch {
     constructor(x, y, vx, vy, gen) {
         this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.gen = gen; this.age = 0; this.active = true;
         this.history = [{x, y}];
-        
-        // パラメータ算出 (Base + Random * Var)
         const rv = () => Math.random() - 0.5;
         this.maxL = Math.max(1, parseFloat(ui.lenB.value) + rv() * 2 * parseFloat(ui.lenV.value));
         this.gEff = parseFloat(ui.gravB.value) + rv() * 2 * parseFloat(ui.gravV.value);
         this.dProb = Math.max(0, parseFloat(ui.deathB.value) + rv() * 2 * parseFloat(ui.deathV.value));
-        this.wEff = parseFloat(ui.windB.value) + rv() * 2 * parseFloat(ui.windV.value);
         this.avD = Math.max(0, parseFloat(ui.avoidB.value) + rv() * 2 * parseFloat(ui.avoidV.value));
-        
-        // 小数点Gen対応
         const limitGen = parseFloat(ui.genB.value) + rv() * 2 * parseFloat(ui.genV.value);
         if (this.gen >= Math.floor(limitGen)) {
             this.maxL *= Math.max(0.01, limitGen - Math.floor(limitGen));
@@ -109,7 +103,6 @@ class Branch {
 
         let ax = 0, ay = 0;
         const gx = Math.floor(this.x / cellSize), gy = Math.floor(this.y / cellSize);
-        
         for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
             const cell = grid[`${gx+i},${gy+j}`];
             if (cell) for(let p of cell) {
@@ -120,10 +113,12 @@ class Branch {
             }
         }
 
+        // グローバルWindの適用
+        const globalWind = parseFloat(ui.wind.value);
         const sf = swipeForce;
         const finalGrav = this.gEff * (sf > 0 ? 0.2 : (sf < 0 ? 3.5 : 1));
         
-        this.vx += ax * 0.15 + this.wEff;
+        this.vx += ax * 0.15 + globalWind;
         this.vy += ay * 0.15 + finalGrav;
         
         if (swipePos) {
@@ -133,7 +128,7 @@ class Branch {
 
         let mag = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
         if (!isFinite(mag) || mag < 0.001) { this.active = false; return; }
-        if (mag > 10) { this.vx *= 0.5; this.vy *= 0.5; mag *= 0.5; } // 爆発防止
+        if (mag > 10) { this.vx *= 0.5; this.vy *= 0.5; mag *= 0.5; }
 
         this.vx = (this.vx/mag) * 2.3; this.vy = (this.vy/mag) * 2.3;
         this.x += this.vx; this.y += this.vy;
@@ -164,6 +159,99 @@ class Branch {
             const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a);
             const ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
             branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
+        }
+    }
+
+    draw() {
+        const prg = this.gen + (this.age / this.maxL);
+        const bT = parseFloat(ui.thick.value);
+        const sz = Math.max(0.2, bT * Math.pow(0.74, prg));
+        const al = Math.min(0.8, Math.max(0.04, sz / 7 + 0.04));
+        ctx.beginPath(); ctx.lineWidth = sz;
+        if (hue === -1) ctx.strokeStyle = `rgba(255,255,255,${al})`;
+        else ctx.strokeStyle = `hsla(${hue}, 80%, ${Math.min(100, 40 + this.gen * 4)}%, ${al})`;
+        ctx.moveTo(this.history[0].x, this.history[0].y);
+        for (let i=1; i<this.history.length; i++) ctx.lineTo(this.history[i].x, this.history[i].y);
+        ctx.lineTo(this.x, this.y); ctx.stroke();
+    }
+}
+
+function init() {
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const uiH = document.getElementById('ui').offsetHeight;
+    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 30, 0, -3, 0)];
+    grid = {}; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function loop() {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    const it = Math.floor(parseFloat(ui.speed.value));
+    for (let i = 0; i < Math.max(1, it); i++) {
+        for (let j=0; j<branches.length; j++) branches[j].update();
+    }
+    for (let i=0; i<branches.length; i++) branches[i].draw();
+    if (swipePos && Math.abs(swipeForce) > 0.05) {
+        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 90);
+        g.addColorStop(0, `rgba(255,255,255,${Math.min(0.2, Math.abs(swipeForce)*0.12)})`);
+        g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 90, 0, Math.PI*2); ctx.fill();
+    }
+    swipeForce *= 0.88; if (Math.abs(swipeForce) < 0.02) { swipePos = null; swipeForce = 0; }
+    requestAnimationFrame(loop);
+}
+
+function showTab(id) {
+    document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelector(`button[onclick="showTab('${id}')"]`).classList.add('active');
+    document.getElementById(id).classList.add('active');
+}
+
+function sync(m) {
+    const v = parseFloat(ui[m === 'gs' ? 'mGrowS' : m === 'gr' ? 'mGrowR' : m === 'cs' ? 'mCurveS' : 'mCurveR'].value);
+    if(m === 'gs') { ui.lenB.value = v * 100; ui.genB.value = 4 + v * 11; ui.deathB.value = v * 0.2; }
+    if(m === 'gr') { ui.lenV.value = v * 50; ui.genV.value = v * 3; ui.deathV.value = v * 0.4; ui.gravV.value = v * 0.15; }
+    if(m === 'cs') { ui.angleB.value = 0.1 + v * 2.4; ui.avoidB.value = v * 120; }
+    if(m === 'cr') { ui.angleV.value = v * 1.5; ui.avoidV.value = v * 60; }
+    init();
+}
+
+function gacha() {
+    const curT = ui.thick.value;
+    // UI要素を全スキャンしてランダム化
+    document.querySelectorAll('#ui input[type=range]').forEach(i => {
+        if(i.id === 'thick' || i.id === 'speed') return;
+        i.value = (Math.random() * (i.max - i.min)) + parseFloat(i.min);
+    });
+    ui.thick.value = curT; init();
+}
+
+function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+function cycleBranchPreset() {
+    ui.mGrowS.value = Math.random(); ui.mGrowR.value = Math.random();
+    ui.mCurveS.value = Math.random(); ui.mCurveR.value = Math.random();
+    ui.wind.value = (Math.random() - 0.5) * 2;
+    ['gs','gr','cs','cr'].forEach(sync);
+}
+function savePNG() {
+    const link = document.createElement('a'); link.download = 'branch_v1_1.png';
+    link.href = canvas.toDataURL('image/png'); link.click();
+}
+
+const hM = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.6; };
+let lY = 0;
+window.addEventListener('touchstart', e => lY = e.touches[0].clientY, { passive: false });
+window.addEventListener('touchmove', e => {
+    const y = e.touches[0].clientY; hM(e.touches[0].clientX, y, lY - y); lY = y;
+}, { passive: false });
+window.addEventListener('mousedown', e => lY = e.clientY);
+window.addEventListener('mousemove', e => { if (e.buttons > 0) { hM(e.clientX, e.clientY, lY - e.clientY); lY = e.clientY; } });
+window.addEventListener('resize', () => setTimeout(init, 200));
+window.onload = init; loop();
+</script>
+</body>
+</html>
         }
     }
 
