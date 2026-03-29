@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v0.6</title>
+    <title>2D Branching Sandbox v0.7</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
@@ -12,61 +12,76 @@
         canvas { display: block; width: 100%; height: 100%; }
         #ui { 
             position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(15, 15, 15, 0.95); color: #eee; 
-            padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
+            background: rgba(15, 15, 15, 0.92); color: #eee; 
+            padding: 8px 10px calc(12px + env(safe-area-inset-bottom));
             display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; 
-            border-top: 1px solid #444; z-index: 10; backdrop-filter: blur(10px);
+            border-top: 1px solid #444; z-index: 10; backdrop-filter: blur(8px);
         }
-        .btns { grid-column: span 2; display: flex; gap: 8px; justify-content: center; margin-bottom: 4px; }
-        button { background: #333; border: 1px solid #555; border-radius: 6px; width: 36px; height: 30px; font-size: 16px; color: #fff; display: flex; align-items: center; justify-content: center; }
-        .ctrl { display: grid; grid-template-columns: 45px 1fr; align-items: center; gap: 4px; }
-        label { font-size: 9px; color: #888; text-align: right; font-weight: bold; }
-        input[type=range] { width: 100%; height: 20px; accent-color: #0af; margin: 0; }
+        .btns { grid-column: span 2; display: flex; gap: 6px; justify-content: center; margin-bottom: 4px; }
+        button { background: #333; border: 1px solid #555; border-radius: 5px; width: 34px; height: 28px; font-size: 14px; color: #fff; display: flex; align-items: center; justify-content: center; }
+        .ctrl { display: grid; grid-template-columns: 42px 1fr; align-items: center; gap: 4px; }
+        label { font-size: 8px; color: #888; text-align: right; font-weight: bold; }
+        input[type=range] { width: 100%; height: 18px; accent-color: #0af; margin: 0; }
     </style>
 </head>
 <body>
-<div id="ver">ver 0.6</div>
+<div id="ver">ver 0.7</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
         <button onclick="cycleColor()">🎨</button>
         <button onclick="cycleBranchPreset()">🌿</button>
+        <button onclick="gacha()">🎲</button>
         <button onclick="savePNG()">💾</button>
         <button onclick="init()">🔄</button>
     </div>
-    <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0.1" max="10" step="0.1" value="5"></div>
+    <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0.1" max="10" step="0.1" value="4"></div>
     <div class="ctrl"><label>LEN</label><input type="range" id="len" min="5" max="100" value="30" oninput="init()"></div>
     <div class="ctrl"><label>VAR</label><input type="range" id="lenVar" min="0" max="50" value="15" oninput="init()"></div>
     <div class="ctrl"><label>GRAV</label><input type="range" id="grav" min="-0.5" max="0.5" step="0.01" value="0.02" oninput="init()"></div>
     <div class="ctrl"><label>AVOID</label><input type="range" id="avoid" min="0" max="100" value="30" oninput="init()"></div>
     <div class="ctrl"><label>ANGLE</label><input type="range" id="angle" min="0.1" max="2.5" step="0.1" value="0.8" oninput="init()"></div>
-    <div class="ctrl"><label>GEN</label><input type="range" id="maxGen" min="1" max="12" value="8" oninput="init()"></div>
+    <div class="ctrl"><label>GEN</label><input type="range" id="maxGen" min="4" max="14" step="0.1" value="8" oninput="init()"></div>
     <div class="ctrl"><label>DEATH</label><input type="range" id="death" min="0" max="0.5" step="0.01" value="0.05" oninput="init()"></div>
-    <div class="ctrl"><label>SMOOTH</label><input type="range" id="smooth" min="0" max="1" step="1" value="1" oninput="init()"></div>
+    <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="20" value="8" oninput="init()"></div>
 </div>
 
 <script>
 const canvas = document.getElementById('cvs'), ctx = canvas.getContext('2d');
 const ui = {}; document.querySelectorAll('input').forEach(el => ui[el.id] = el);
-let width, height, dpr, branches = [], grid = {}, swipePos = null, swipeForce = 0, hue = 140;
-const cellSize = 40;
+let width, height, dpr, branches = [], grid = {}, swipePos = null, swipeForce = 0, hue = -1;
+const cellSize = 40, colors = [-1, 140, 200, 280, 25, 330, 0]; // -1 is White
 
 const branchPresets = [
-    {len:30, lenVar:15, grav:0.02, avoid:30, angle:0.8, maxGen:8, death:0.05},
-    {len:12, lenVar:4, grav:-0.05, avoid:10, angle:1.6, maxGen:10, death:0.02},
-    {len:55, lenVar:25, grav:0.12, avoid:40, angle:0.4, maxGen:7, death:0.08},
-    {len:25, lenVar:20, grav:0, avoid:60, angle:2.2, maxGen:9, death:0.01}
+    {len:30, lenVar:15, grav:0.02, avoid:30, angle:0.8, maxGen:8, death:0.05, thick:8}, // Normal
+    {len:12, lenVar:4, grav:-0.08, avoid:10, angle:1.6, maxGen:10, death:0.02, thick:5}, // Fine
+    {len:55, lenVar:25, grav:0.12, avoid:45, angle:0.4, maxGen:7, death:0.1, thick:12}, // Heavy
+    {len:25, lenVar:20, grav:0, avoid:70, angle:2.2, maxGen:9, death:0.01, thick:6}, // Spread
+    {len:15, lenVar:5, grav:0.01, avoid:60, angle:1.2, maxGen:12, death:0.02, thick:4}, // Moss/Coral
+    {len:40, lenVar:10, grav:-0.15, avoid:15, angle:0.7, maxGen:8, death:0.05, thick:7}, // Floating
+    {len:10, lenVar:2, grav:0.02, avoid:80, angle:1.8, maxGen:13, death:0, thick:3} // Dense
 ];
-let bPIdx = 0, colorIdx = 0, colors = [140, 200, 280, 25, 330, 0];
+let bPIdx = 0, colorIdx = 0;
 
 class Branch {
     constructor(x, y, vx, vy, gen) {
-        this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.gen = gen; this.age = 0; this.active = true;
-        this.history = [{x, y}];
-        this.maxLength = parseFloat(ui.len.value) + (Math.random() - 0.5) * parseFloat(ui.lenVar.value) * 2;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.gen = gen; this.age = 0; this.active = true; this.history = [{x, y}];
+        const baseL = parseFloat(ui.len.value);
+        const lVar = parseFloat(ui.lenVar.value);
+        this.maxLength = (baseL + (Math.random() - 0.5) * lVar * 2) * (1 + (swipeForce > 0 ? swipeForce*0.5 : 0));
+        
+        // 小数点Gen対応：最終世代の長さを制限
+        const mGen = parseFloat(ui.maxGen.value);
+        if (this.gen >= Math.floor(mGen)) {
+            this.maxLength *= (mGen - Math.floor(mGen));
+            if (this.maxLength < 1) this.active = false;
+        }
     }
     update() {
         if (!this.active) return;
+        // 画面外シザリング
+        if (this.x < -20 || this.x > width/dpr+20 || this.y < -20 || this.y > height/dpr+20) { this.active = false; return; }
+
         let avX = 0, avY = 0; const dist = parseFloat(ui.avoid.value), d2_limit = dist * dist;
         const gx = Math.floor(this.x / cellSize), gy = Math.floor(this.y / cellSize);
         for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
@@ -76,30 +91,123 @@ class Branch {
                 if (d2 < d2_limit && d2 > 0) { let d = Math.sqrt(d2); avX += dx/d; avY += dy/d; }
             }
         }
-        this.vx += avX * 0.15; this.vy += avY * 0.15 + parseFloat(ui.grav.value);
+
+        let gEff = parseFloat(ui.grav.value) * (swipeForce > 0 ? 0.2 : (swipeForce < 0 ? 2 : 1));
+        this.vx += avX * 0.15; this.vy += avY * 0.15 + gEff;
+        
         if (swipePos) {
             let dx = this.x - swipePos.x, dy = this.y - swipePos.y, sd2 = dx*dx + dy*dy;
-            if (sd2 < 8000) this.vy -= swipeForce * (1 - Math.sqrt(sd2)/90) * 0.8;
+            if (sd2 < 10000) this.vy -= swipeForce * (1 - Math.sqrt(sd2)/100) * 0.8;
         }
+
         const mag = Math.sqrt(this.vx**2 + this.vy**2);
         this.vx = (this.vx/mag) * 2.2; this.vy = (this.vy/mag) * 2.2;
         this.x += this.vx; this.y += this.vy;
         this.history.push({x: this.x, y: this.y});
-        if (this.age % 2 === 0) { // 負荷軽減のためサンプリング
+
+        if (this.age % 3 === 0) {
             const key = `${Math.floor(this.x/cellSize)},${Math.floor(this.y/cellSize)}`;
             if (!grid[key]) grid[key] = []; grid[key].push({x: this.x, y: this.y});
         }
-        if (++this.age > this.maxLength) {
+
+        if (++this.age >= this.maxLength) {
             this.active = false;
-            if (this.gen < parseInt(ui.maxGen.value) && Math.random() > parseFloat(ui.death.value)) this.split();
+            const mGen = parseFloat(ui.maxGen.value);
+            if (this.gen < Math.floor(mGen)) {
+                let dProb = parseFloat(ui.death.value) * (swipeForce > 0 ? 0.2 : (swipeForce < 0 ? 3 : 1));
+                // 1-3世代は死なない
+                if (this.gen < 3 || Math.random() > dProb) this.split();
+            }
         }
     }
     split() {
-        const num = Math.random() > 0.8 ? 3 : 2; const angBase = parseFloat(ui.angle.value);
+        let num = Math.random() > 0.8 ? 3 : 2;
+        if (this.gen < 3) num = Math.max(num, 2); // 3世代目までは必ず2本以上
+        const angBase = parseFloat(ui.angle.value);
         for (let i = 0; i < num; i++) {
             const a = (i - (num-1)/2) * angBase + (Math.random()-0.5) * 0.3;
             const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a), ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
-            // 親の最終地点を正確に継承
+            branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
+        }
+    }
+    draw() {
+        const mGen = parseFloat(ui.maxGen.value);
+        const progress = this.gen + (this.age / this.maxLength);
+        const baseT = parseFloat(ui.thick.value);
+        // 太さの滑らかな補間
+        const size = Math.max(0.4, baseT * Math.pow(0.75, progress));
+        const alpha = Math.min(0.9, size / 5 + 0.1);
+
+        ctx.beginPath();
+        ctx.lineWidth = size;
+        if (hue === -1) ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        else ctx.strokeStyle = `hsla(${hue}, 80%, ${40 + this.gen * 4}%, ${alpha})`;
+        
+        ctx.moveTo(this.history[0].x, this.history[0].y);
+        for (let p of this.history) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+    }
+}
+
+function init() {
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const uiH = document.getElementById('ui').offsetHeight;
+    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 20, 0, -3, 0)];
+    grid = {}; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function loop() {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    const s = parseFloat(ui.speed.value);
+    const iters = s < 1 ? (Math.random() < s ? 1 : 0) : Math.floor(s);
+    for (let i = 0; i < iters; i++) for (let b of branches) b.update();
+    for (let b of branches) b.draw();
+    if (swipePos) {
+        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 80);
+        g.addColorStop(0, `rgba(255,255,255,0.3)`); g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 80, 0, Math.PI*2); ctx.fill();
+    }
+    swipeForce *= 0.88; if (Math.abs(swipeForce) < 0.02) swipePos = null;
+    requestAnimationFrame(loop);
+}
+
+function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+function cycleBranchPreset() {
+    bPIdx = (bPIdx + 1) % branchPresets.length;
+    applyPreset(branchPresets[bPIdx]);
+}
+function gacha() {
+    const p = {
+        len: 10 + Math.random()*80, lenVar: Math.random()*40, grav: (Math.random()-0.5)*0.4,
+        avoid: Math.random()*100, angle: 0.2 + Math.random()*2, maxGen: 5 + Math.random()*8,
+        death: Math.random()*0.2, thick: 2 + Math.random()*15
+    };
+    applyPreset(p);
+}
+function applyPreset(p) {
+    Object.keys(p).forEach(k => { if(ui[k]) ui[k].value = p[k]; });
+    init();
+}
+function savePNG() {
+    const link = document.createElement('a'); link.download = 'branch_v07.png';
+    link.href = canvas.toDataURL('image/png'); link.click();
+}
+
+const handleMove = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.5; };
+let lastY = 0;
+window.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; }, { passive: false });
+window.addEventListener('touchmove', e => {
+    const y = e.touches[0].clientY; handleMove(e.touches[0].clientX, y, lastY - y); lastY = y;
+}, { passive: false });
+window.addEventListener('mousedown', e => { lastY = e.clientY; });
+window.addEventListener('mousemove', e => { if (e.buttons > 0) { handleMove(e.clientX, e.clientY, lastY - e.clientY); lastY = e.clientY; } });
+window.addEventListener('resize', () => { setTimeout(init, 200); });
+window.onload = init; loop();
+</script>
+</body>
+</html>
             branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
         }
     }
