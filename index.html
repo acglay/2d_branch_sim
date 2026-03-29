@@ -1,119 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>2D Branching Sandbox</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2D Branching Sandbox Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
         canvas { display: block; }
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-size: 12px; pointer-events: auto; }
-        .row { margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; }
-        input[type=range] { width: 100px; margin-left: 10px; }
+        #ui {
+            position: absolute; bottom: 0; left: 0; width: 100%; 
+            background: rgba(15, 15, 15, 0.9); color: #fff; 
+            padding: 15px; box-sizing: border-box;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+            max-height: 40vh; overflow-y: auto; border-top: 1px solid #444;
+            backdrop-filter: blur(10px);
+        }
+        .ctrl { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+        label { font-size: 11px; color: #aaa; text-transform: uppercase; }
+        input[type=range] { width: 100%; height: 30px; accent-color: #0af; }
+        .buttons { grid-column: span 2; display: flex; gap: 5px; flex-wrap: wrap; }
+        button { 
+            flex: 1; padding: 10px; font-size: 12px; background: #333; color: #fff; 
+            border: none; border-radius: 4px; cursor: pointer; min-width: 80px;
+        }
+        button.preset { background: #444; border: 1px solid #666; }
+        button#save { background: #074; }
+        button#reset { background: #700; }
     </style>
 </head>
 <body>
-<div id="ui">
-    <div class="row">Speed <input type="range" id="speed" min="1" max="20" value="5"></div>
-    <div class="row">Hue <input type="range" id="hue" min="0" max="360" value="140"></div>
-    <div class="row">Gravity <input type="range" id="gravity" min="-0.5" max="0.5" step="0.01" value="0.05"></div>
-    <div class="row">Avoidance <input type="range" id="avoid" min="0" max="50" value="20"></div>
-    <div class="row">Smoothness <input type="range" id="smooth" min="0" max="1" step="1" value="1"></div>
-    <div style="font-size: 10px; opacity: 0.7;">Swipe Up: Grow / Down: Inhibitor</div>
-</div>
 <canvas id="cvs"></canvas>
+<div id="ui">
+    <div class="buttons">
+        <button class="preset" onclick="setPreset(140, 1)">Nature</button>
+        <button class="preset" onclick="setPreset(280, 0.8)">Cyber</button>
+        <button class="preset" onclick="setPreset(20, 1.2)">Autumn</button>
+        <button id="save" onclick="savePNG()">Save PNG</button>
+        <button id="reset" onclick="init()">Reset</button>
+    </div>
+    <div class="ctrl"><label>Speed</label><input type="range" id="speed" min="1" max="10" value="1"></div>
+    <div class="ctrl"><label>Hue</label><input type="range" id="hue" min="0" max="360" value="140"></div>
+    <div class="ctrl"><label>Branch Length</label><input type="range" id="len" min="5" max="100" value="30"></div>
+    <div class="ctrl"><label>Len Random</label><input type="range" id="lenVar" min="0" max="50" value="15"></div>
+    <div class="ctrl"><label>Gravity</label><input type="range" id="grav" min="-0.5" max="0.5" step="0.01" value="0.02"></div>
+    <div class="ctrl"><label>Avoid Dist</label><input type="range" id="avoid" min="0" max="100" value="30"></div>
+    <div class="ctrl"><label>Split Angle</label><input type="range" id="angle" min="0.1" max="2.5" step="0.1" value="0.8"></div>
+    <div class="ctrl"><label>Max Gen</label><input type="range" id="maxGen" min="1" max="12" value="8"></div>
+    <div class="ctrl"><label>Death Prob</label><input type="range" id="death" min="0" max="0.5" step="0.01" value="0.05"></div>
+    <div class="ctrl"><label>Smoothing</label><input type="range" id="smooth" min="0" max="1" step="1" value="1"></div>
+</div>
 
 <script>
 const canvas = document.getElementById('cvs');
 const ctx = canvas.getContext('2d');
-const ui = {
-    speed: document.getElementById('speed'),
-    hue: document.getElementById('hue'),
-    gravity: document.getElementById('gravity'),
-    avoid: document.getElementById('avoid'),
-    smooth: document.getElementById('smooth')
-};
+const ui = {};
+document.querySelectorAll('input').forEach(el => ui[el.id] = el);
 
-let width, height;
-let branches = [];
-let points = []; 
-let swipeEffect = 0;
+let width, height, branches = [], points = [], swipeEffect = 0;
 
 class Branch {
     constructor(x, y, vx, vy, gen) {
-        this.x = x;
-        this.y = y;
-        this.vx = vx;
-        this.vy = vy;
-        this.gen = gen;
-        this.age = 0;
-        this.active = true;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.gen = gen; this.age = 0; this.active = true;
         this.history = [{x, y}];
-        this.maxLength = 15 + Math.random() * 20;
+        const baseL = parseFloat(ui.len.value);
+        const lVar = parseFloat(ui.lenVar.value);
+        this.maxLength = baseL + (Math.random() - 0.5) * lVar * 2;
     }
 
     update() {
         if (!this.active) return;
-
-        let avX = 0;
-        let avY = 0;
-        const avoidDist = parseFloat(ui.avoid.value);
-        
+        let avX = 0, avY = 0;
+        const dist = parseFloat(ui.avoid.value);
         for (let p of points) {
-            let dx = this.x - p.x;
-            let dy = this.y - p.y;
+            let dx = this.x - p.x, dy = this.y - p.y;
             let d2 = dx*dx + dy*dy;
-            if (d2 < avoidDist * avoidDist && d2 > 0) {
+            if (d2 < dist*dist && d2 > 0) {
                 let d = Math.sqrt(d2);
-                avX += dx / d;
-                avY += dy / d;
+                avX += dx/d; avY += dy/d;
             }
         }
-
         this.vx += avX * 0.1;
-        this.vy += avY * 0.1 + parseFloat(ui.gravity.value);
-        
-        // Swipe Influence
-        this.vy -= swipeEffect * 0.2;
-
+        this.vy += avY * 0.1 + parseFloat(ui.grav.value);
+        this.vy -= swipeEffect * 0.15;
         const mag = Math.sqrt(this.vx**2 + this.vy**2);
         this.vx = (this.vx / mag) * 2;
         this.vy = (this.vy / mag) * 2;
-
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx; this.y += this.vy;
         this.history.push({x: this.x, y: this.y});
         points.push({x: this.x, y: this.y});
-
         this.age++;
-        
         if (this.age > this.maxLength) {
             this.active = false;
-            if (this.gen < 8 && Math.random() > 0.2 + (swipeEffect < 0 ? 0.5 : 0)) {
-                this.branchOut();
-            }
+            const maxG = parseInt(ui.maxGen.value);
+            const dProb = parseFloat(ui.death.value);
+            if (this.gen < maxG && Math.random() > dProb) this.split();
         }
     }
 
-    branchOut() {
-        const num = Math.random() > 0.8 ? 3 : 2;
+    split() {
+        const num = Math.random() > 0.85 ? 3 : 2;
+        const angBase = parseFloat(ui.angle.value);
         for (let i = 0; i < num; i++) {
-            const ang = (Math.random() - 0.5) * 1.5;
-            const nx = this.vx * Math.cos(ang) - this.vy * Math.sin(ang);
-            const ny = this.vx * Math.sin(ang) + this.vy * Math.cos(ang);
+            const a = (i - (num-1)/2) * angBase + (Math.random()-0.5) * 0.5;
+            const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a);
+            const ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
             branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
         }
     }
 
     draw() {
         ctx.beginPath();
-        ctx.lineWidth = Math.max(0.5, (10 - this.gen) * 0.5);
-        ctx.strokeStyle = `hsla(${ui.hue.value}, 70%, ${50 + this.gen * 5}%, ${0.8 - this.gen * 0.05})`;
-        
+        ctx.lineWidth = Math.max(0.5, (parseInt(ui.maxGen.value) - this.gen) * 0.8);
+        ctx.strokeStyle = `hsla(${ui.hue.value}, 70%, ${40 + this.gen * 5}%, ${0.9 - this.gen * 0.05})`;
         if (ui.smooth.value == "1" && this.history.length > 2) {
             ctx.moveTo(this.history[0].x, this.history[0].y);
             for (let i = 1; i < this.history.length - 2; i++) {
-                const xc = (this.history[i].x + this.history[i + 1].x) / 2;
-                const yc = (this.history[i].y + this.history[i + 1].y) / 2;
+                const xc = (this.history[i].x + this.history[i+1].x)/2;
+                const yc = (this.history[i].y + this.history[i+1].y)/2;
                 ctx.quadraticCurveTo(this.history[i].x, this.history[i].y, xc, yc);
             }
         } else {
@@ -127,46 +131,50 @@ class Branch {
 function init() {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
-    branches = [new Branch(width / 2, height, 0, -2, 0)];
+    branches = [new Branch(width/2, height, 0, -3, 0)];
     points = [];
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.clearRect(0, 0, width, height);
 }
 
 function loop() {
-    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
     ctx.fillRect(0, 0, width, height);
-
     const iters = parseInt(ui.speed.value);
     for (let i = 0; i < iters; i++) {
         for (let b of branches) b.update();
     }
-
     for (let b of branches) b.draw();
-    
-    swipeEffect *= 0.95; 
+    swipeEffect *= 0.92;
     requestAnimationFrame(loop);
 }
 
-let touchY = 0;
-window.addEventListener('mousedown', e => touchY = e.clientY);
-window.addEventListener('mousemove', e => {
-    if (e.buttons > 0) {
-        swipeEffect = (touchY - e.clientY) * 0.1;
-        touchY = e.clientY;
-    }
-});
-window.addEventListener('touchstart', e => touchY = e.touches[0].clientY);
-window.addEventListener('touchmove', e => {
-    swipeEffect = (touchY - e.touches[0].clientY) * 0.1;
-    touchY = e.touches[0].clientY;
-});
-window.addEventListener('dblclick', init);
-window.addEventListener('resize', init);
+function savePNG() {
+    const link = document.createElement('a');
+    link.download = 'branch_art.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+}
 
-init();
-loop();
+function setPreset(h, g) {
+    ui.hue.value = h;
+    ui.grav.value = g - 1;
+    init();
+}
+
+let touchY = 0;
+const start = e => touchY = (e.touches ? e.touches[0].clientY : e.clientY);
+const move = e => {
+    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    if (e.buttons > 0 || e.touches) {
+        swipeEffect = (touchY - y) * 0.2;
+        touchY = y;
+    }
+};
+window.addEventListener('mousedown', start); window.addEventListener('mousemove', move);
+window.addEventListener('touchstart', start); window.addEventListener('touchmove', move);
+window.addEventListener('resize', init);
+init(); loop();
 </script>
 </body>
 </html>
-
