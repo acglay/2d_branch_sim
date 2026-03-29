@@ -3,52 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v0.4</title>
+    <title>2D Branching Sandbox v0.5</title>
     <style>
-        /* 画面全体のレイアウト：上半分がCanvas、下端がUI */
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        body { display: flex; flex-direction: column; font-family: sans-serif; touch-action: none; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; }
+        
+        #ver { position: absolute; top: 10px; left: 10px; color: #fff; opacity: 0.3; font-size: 10px; z-index: 5; pointer-events: none; }
 
-        /* バージョン表示（キャンバスの上に浮かせる） */
-        #ver { position: absolute; top: 10px; left: 10px; color: #fff; opacity: 0.3; font-size: 10px; pointer-events: none; z-index: 10; }
-
-        /* シミュレーション領域（最大限確保） */
-        #cvs-wrap { flex: 1; width: 100%; position: relative; background: #000; overflow: hidden; }
+        /* キャンバスは画面全体に広げる */
+        #cvs-wrap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        /* UIエリア（最下部に配置） */
+        /* UIエリアを画面下端に完全に固定 */
         #ui { 
-            background: #111; color: #eee; padding: 6px 10px 15px 10px; 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; 
-            border-top: 1px solid #333; z-index: 20;
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: rgba(15, 15, 15, 0.95); color: #eee; 
+            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); /* iPhoneのノッチ対応 */
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; 
+            border-top: 1px solid #444; z-index: 10;
+            backdrop-filter: blur(10px);
         }
 
-        /* スライダー設定：ラベルを左に配置 */
-        .ctrl { display: grid; grid-template-columns: 45px 1fr; align-items: center; gap: 4px; }
-        label { font-size: 8px; color: #777; text-align: right; overflow: hidden; text-overflow: ellipsis; }
-        input[type=range] { width: 100%; height: 16px; accent-color: #0af; margin: 0; }
-
-        /* ボタンエリア：3/4サイズ化 */
-        .btns { grid-column: span 2; display: flex; gap: 4px; justify-content: center; padding-bottom: 4px; }
+        .btns { grid-column: span 2; display: flex; gap: 8px; justify-content: center; margin-bottom: 6px; }
         button { 
-            background: #2a2a2a; border: none; border-radius: 4px; 
-            width: 32px; height: 28px; font-size: 14px; 
-            cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center; 
+            background: #333; border: 1px solid #555; border-radius: 6px; 
+            width: 40px; height: 34px; font-size: 18px; color: #fff;
+            display: flex; align-items: center; justify-content: center;
         }
-        button:active { background: #555; }
+        button:active { background: #666; }
+
+        .ctrl { display: grid; grid-template-columns: 50px 1fr; align-items: center; gap: 6px; }
+        label { font-size: 9px; color: #999; text-align: right; font-weight: bold; }
+        input[type=range] { width: 100%; height: 24px; accent-color: #0af; margin: 0; }
     </style>
 </head>
 <body>
-<div id="ver">ver 0.4</div>
+<div id="ver">ver 0.5</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
-        <button onclick="cycleColor()" title="Color">🎨</button>
-        <button onclick="cycleBranchPreset()" title="Preset">🌿</button>
-        <button onclick="savePNG()" title="Save">💾</button>
-        <button onclick="init()" title="Reset">🔄</button>
+        <button onclick="cycleColor()">🎨</button>
+        <button onclick="cycleBranchPreset()">🌿</button>
+        <button onclick="savePNG()">💾</button>
+        <button onclick="init()">🔄</button>
     </div>
-    <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="1" max="40" value="10"></div>
+    <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="1" max="60" value="20"></div>
     <div class="ctrl"><label>LEN</label><input type="range" id="len" min="5" max="100" value="30"></div>
     <div class="ctrl"><label>VAR</label><input type="range" id="lenVar" min="0" max="50" value="15"></div>
     <div class="ctrl"><label>GRAV</label><input type="range" id="grav" min="-0.5" max="0.5" step="0.01" value="0.02"></div>
@@ -67,12 +66,12 @@ let width, height, dpr, branches = [], points = [], swipePos = null, swipeForce 
 
 const branchPresets = [
     {len:30, lenVar:15, grav:0.02, avoid:30, angle:0.8, maxGen:8, death:0.05},
-    {len:15, lenVar:5, grav:-0.1, avoid:10, angle:1.5, maxGen:10, death:0.02},
-    {len:50, lenVar:20, grav:0.1, avoid:40, angle:0.4, maxGen:7, death:0.08},
-    {len:25, lenVar:20, grav:0, avoid:80, angle:2.1, maxGen:9, death:0.01}
+    {len:12, lenVar:4, grav:-0.08, avoid:8, angle:1.6, maxGen:10, death:0.02},
+    {len:55, lenVar:25, grav:0.15, avoid:45, angle:0.3, maxGen:7, death:0.1},
+    {len:25, lenVar:20, grav:0, avoid:70, angle:2.2, maxGen:9, death:0.01}
 ];
 let bPIdx = 0, colorIdx = 0;
-const colors = [140, 200, 280, 20, 180, 0];
+const colors = [140, 200, 280, 25, 330, 0];
 
 class Branch {
     constructor(x, y, vx, vy, gen) {
@@ -86,19 +85,19 @@ class Branch {
             let dx = this.x - p.x, dy = this.y - p.y; let d2 = dx*dx + dy*dy;
             if (d2 < dist*dist && d2 > 0) { let d = Math.sqrt(d2); avX += dx/d; avY += dy/d; }
         }
-        this.vx += avX * 0.12; this.vy += avY * 0.12 + parseFloat(ui.grav.value);
+        this.vx += avX * 0.15; this.vy += avY * 0.15 + parseFloat(ui.grav.value);
         if (swipePos) {
             let dx = this.x - swipePos.x, dy = this.y - swipePos.y; let d2 = dx*dx + dy*dy;
-            if (d2 < 10000) { this.vy -= swipeForce * (1 - Math.sqrt(d2)/100) * 0.6; }
+            if (d2 < 8000) { this.vy -= swipeForce * (1 - Math.sqrt(d2)/90) * 0.8; }
         }
-        const mag = Math.sqrt(this.vx**2 + this.vy**2); this.vx = (this.vx / mag) * 2; this.vy = (this.vy / mag) * 2;
+        const mag = Math.sqrt(this.vx**2 + this.vy**2); this.vx = (this.vx / mag) * 2.2; this.vy = (this.vy / mag) * 2.2;
         this.x += this.vx; this.y += this.vy; this.history.push({x: this.x, y: this.y}); points.push({x: this.x, y: this.y});
         if (++this.age > this.maxLength) {
             this.active = false; if (this.gen < parseInt(ui.maxGen.value) && Math.random() > parseFloat(ui.death.value)) this.split();
         }
     }
     split() {
-        const num = Math.random() > 0.85 ? 3 : 2; const angBase = parseFloat(ui.angle.value);
+        const num = Math.random() > 0.8 ? 3 : 2; const angBase = parseFloat(ui.angle.value);
         for (let i = 0; i < num; i++) {
             const a = (i - (num-1)/2) * angBase + (Math.random()-0.5) * 0.4;
             const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a); const ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
@@ -107,7 +106,7 @@ class Branch {
     }
     draw() {
         ctx.beginPath(); ctx.lineWidth = Math.max(0.6, (parseInt(ui.maxGen.value) - this.gen) * 0.8);
-        ctx.strokeStyle = `hsla(${hue}, 80%, ${45 + this.gen * 4}%, ${0.9 - this.gen * 0.05})`;
+        ctx.strokeStyle = `hsla(${hue}, 85%, ${45 + this.gen * 4}%, ${0.9 - this.gen * 0.05})`;
         if (ui.smooth.value == "1" && this.history.length > 2) {
             ctx.moveTo(this.history[0].x, this.history[0].y);
             for (let i = 1; i < this.history.length - 2; i++) {
@@ -123,22 +122,30 @@ class Branch {
 }
 
 function init() {
-    const wrap = document.getElementById('cvs-wrap'); dpr = window.devicePixelRatio || 1;
-    width = canvas.width = wrap.clientWidth * dpr; height = canvas.height = wrap.clientHeight * dpr;
-    ctx.resetTransform(); ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    branches = [new Branch(wrap.clientWidth/2, wrap.clientHeight, 0, -3, 0)]; points = [];
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, wrap.clientWidth, wrap.clientHeight);
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr;
+    height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // 初期地点：UIの少し上に設定
+    const uiHeight = document.getElementById('ui').offsetHeight;
+    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiHeight - 20, 0, -3, 0)];
+    points = [];
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 }
 
 function loop() {
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(0, 0, canvas.width/dpr, canvas.height/dpr);
-    const iters = Math.floor(parseInt(ui.speed.value) / 2); // スピード調整
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; 
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    
+    const iters = Math.floor(parseInt(ui.speed.value) / 2);
     for (let i = 0; i < Math.max(1, iters); i++) for (let b of branches) b.update();
     for (let b of branches) b.draw();
+    
     if (swipePos) {
-        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 70);
+        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 80);
         g.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.4)`); g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 70, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 80, 0, Math.PI*2); ctx.fill();
     }
     swipeForce *= 0.85; if (Math.abs(swipeForce) < 0.05) swipePos = null;
     requestAnimationFrame(loop);
@@ -150,184 +157,26 @@ function cycleBranchPreset() {
     Object.keys(p).forEach(k => ui[k].value = p[k]); init();
 }
 function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v04.png';
+    const link = document.createElement('a'); link.download = 'branch_v05.png';
     link.href = canvas.toDataURL('image/png'); link.click();
 }
 
 const handleMove = (x, y, dy) => {
-    const rect = canvas.getBoundingClientRect();
-    swipePos = { x: x - rect.left, y: y - rect.top };
-    swipeForce = dy * 0.5;
+    swipePos = { x, y };
+    swipeForce = dy * 0.6;
 };
 let lastY = 0;
-window.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; });
+window.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; }, { passive: false });
 window.addEventListener('touchmove', e => {
     const y = e.touches[0].clientY; handleMove(e.touches[0].clientX, y, lastY - y); lastY = y;
 }, { passive: false });
 window.addEventListener('mousedown', e => { lastY = e.clientY; });
 window.addEventListener('mousemove', e => { if (e.buttons > 0) { handleMove(e.clientX, e.clientY, lastY - e.clientY); lastY = e.clientY; } });
-window.addEventListener('resize', () => { setTimeout(init, 100); });
-init(); loop();
-</script>
-</body>
-</html>
-    }
-}
 
-function init() {
-    const wrap = document.getElementById('cvs-wrap'); dpr = window.devicePixelRatio || 1;
-    width = canvas.width = wrap.clientWidth * dpr; height = canvas.height = wrap.clientHeight * dpr;
-    ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    branches = [new Branch(wrap.clientWidth/2, wrap.clientHeight, 0, -3, 0)]; points = [];
-    ctx.clearRect(0, 0, width, height);
-}
-
-function loop() {
-    ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, 0, width, height);
-    const iters = parseInt(ui.speed.value);
-    for (let i = 0; i < iters; i++) for (let b of branches) b.update();
-    for (let b of branches) b.draw();
-    if (swipePos) {
-        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 60);
-        g.addColorStop(0, `hsla(${hue}, 100%, 70%, 0.3)`); g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 60, 0, Math.PI*2); ctx.fill();
-    }
-    swipeForce *= 0.9; if (Math.abs(swipeForce) < 0.01) swipePos = null;
-    requestAnimationFrame(loop);
-}
-
-function cycleColor() { hue = colors[++colorIdx % colors.length]; }
-function cycleBranchPreset() {
-    bPIdx = (bPIdx + 1) % branchPresets.length; const p = branchPresets[bPIdx];
-    Object.keys(p).forEach(k => ui[k].value = p[k]); init();
-}
-function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v03.png';
-    link.href = canvas.toDataURL('image/png'); link.click();
-}
-
-const handleMove = (x, y, dy) => {
-    const rect = canvas.getBoundingClientRect();
-    swipePos = { x: x - rect.left, y: y - rect.top };
-    swipeForce = dy * 0.4;
-};
-let lastY = 0;
-window.addEventListener('touchstart', e => lastY = e.touches[0].clientY);
-window.addEventListener('touchmove', e => {
-    const y = e.touches[0].clientY; handleMove(e.touches[0].clientX, y, lastY - y); lastY = y;
-});
-window.addEventListener('mousedown', e => lastY = e.clientY);
-window.addEventListener('mousemove', e => { if (e.buttons > 0) { handleMove(e.clientX, e.clientY, lastY - e.clientY); lastY = e.clientY; } });
-window.addEventListener('resize', init);
-init(); loop();
-</script>
-</body>
-</html>
-    const iters = parseInt(ui.speed.value);
-    for (let i = 0; i < iters; i++) { for (let b of branches) b.update(); }
-    for (let b of branches) b.draw();
-    swipeEffect *= 0.9; requestAnimationFrame(loop);
-}
-
-function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v02.png';
-    link.href = canvas.toDataURL('image/png'); link.click();
-}
-
-function cyclePreset() {
-    presetIdx = (presetIdx + 1) % presets.length;
-    ui.hue.value = presets[presetIdx].h; ui.grav.value = presets[presetIdx].g;
-    init();
-}
-
-let tY = 0;
-const st = e => tY = (e.touches ? e.touches[0].clientY : e.clientY);
-const mv = e => {
-    const y = (e.touches ? e.touches[0].clientY : e.clientY);
-    if (e.buttons > 0 || e.touches) { swipeEffect = (tY - y) * 0.25; tY = y; }
-};
-window.addEventListener('mousedown', st); window.addEventListener('mousemove', mv);
-window.addEventListener('touchstart', st); window.addEventListener('touchmove', mv);
-window.addEventListener('resize', init);
-init(); loop();
-</script>
-</body>
-</html>
-        const angBase = parseFloat(ui.angle.value);
-        for (let i = 0; i < num; i++) {
-            const a = (i - (num-1)/2) * angBase + (Math.random()-0.5) * 0.5;
-            const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a);
-            const ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
-            branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
-        }
-    }
-
-    draw() {
-        ctx.beginPath();
-        ctx.lineWidth = Math.max(0.5, (parseInt(ui.maxGen.value) - this.gen) * 0.8);
-        ctx.strokeStyle = `hsla(${ui.hue.value}, 70%, ${40 + this.gen * 5}%, ${0.9 - this.gen * 0.05})`;
-        if (ui.smooth.value == "1" && this.history.length > 2) {
-            ctx.moveTo(this.history[0].x, this.history[0].y);
-            for (let i = 1; i < this.history.length - 2; i++) {
-                const xc = (this.history[i].x + this.history[i+1].x)/2;
-                const yc = (this.history[i].y + this.history[i+1].y)/2;
-                ctx.quadraticCurveTo(this.history[i].x, this.history[i].y, xc, yc);
-            }
-        } else {
-            ctx.moveTo(this.history[0].x, this.history[0].y);
-            for (let p of this.history) ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-    }
-}
-
-function init() {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-    branches = [new Branch(width/2, height, 0, -3, 0)];
-    points = [];
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.clearRect(0, 0, width, height);
-}
-
-function loop() {
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.fillRect(0, 0, width, height);
-    const iters = parseInt(ui.speed.value);
-    for (let i = 0; i < iters; i++) {
-        for (let b of branches) b.update();
-    }
-    for (let b of branches) b.draw();
-    swipeEffect *= 0.92;
-    requestAnimationFrame(loop);
-}
-
-function savePNG() {
-    const link = document.createElement('a');
-    link.download = 'branch_art.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-}
-
-function setPreset(h, g) {
-    ui.hue.value = h;
-    ui.grav.value = g - 1;
-    init();
-}
-
-let touchY = 0;
-const start = e => touchY = (e.touches ? e.touches[0].clientY : e.clientY);
-const move = e => {
-    const y = (e.touches ? e.touches[0].clientY : e.clientY);
-    if (e.buttons > 0 || e.touches) {
-        swipeEffect = (touchY - y) * 0.2;
-        touchY = y;
-    }
-};
-window.addEventListener('mousedown', start); window.addEventListener('mousemove', move);
-window.addEventListener('touchstart', start); window.addEventListener('touchmove', move);
-window.addEventListener('resize', init);
-init(); loop();
+window.addEventListener('resize', () => { setTimeout(init, 200); });
+// UIの高さが確定してから初期化
+window.onload = init;
+loop();
 </script>
 </body>
 </html>
