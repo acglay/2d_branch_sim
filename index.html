@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v2.0</title>
+    <title>2D Branching Sandbox v2.1</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -29,7 +29,7 @@
     </style>
 </head>
 <body>
-<div id="ver">ver 2.0 Pro</div>
+<div id="ver">ver 2.1 Trim</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
@@ -75,9 +75,8 @@
     </div>
 
     <div id="lookdev" class="tab-content">
-        <div class="ctrl"><label>GENSCALE</label><input type="range" id="genScale" min="0.1" max="2.0" step="0.01" value="1.0"></div>
+        <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
         <div class="ctrl"><label>DECAY</label><input type="range" id="decay" min="0.5" max="1.2" step="0.01" value="1.0"></div>
-        <div class="ctrl"><label>SMOOTH</label><input type="range" id="curviness" min="0" max="1" step="1" value="0"></div>
     </div>
 </div>
 
@@ -87,26 +86,12 @@ const ui = {}; document.querySelectorAll('input').forEach(el => ui[el.id] = el);
 let width, height, dpr, branches = [], grid = {}, swipePos = null, swipeForce = 0, hue = -1;
 const cellSize = 60, colors = [-1, 140, 200, 280, 45, 10, 180, 310];
 
-/**
- * Branch Model: 座標ではなく「設計図（DNA）」を保持する
- */
 class Branch {
     constructor(x, y, angle, gen, parent = null) {
-        this.startX = x;
-        this.startY = y;
-        this.startAngle = angle;
-        this.gen = gen;
-        this.parent = parent;
-        this.active = true;
-        this.age = 0;
-        
-        // シミュレーション用の一時的な現在地
-        this.currX = x;
-        this.currY = y;
-        this.currAngle = angle;
-
-        // 設計図（DNA）: 各ステップの相対的な変化を記録
-        this.dna = []; 
+        this.startX = x; this.startY = y; this.startAngle = angle;
+        this.gen = gen; this.parent = parent; this.active = true; this.age = 0;
+        this.currX = x; this.currY = y; this.currAngle = angle;
+        this.dna = []; // 設計図（各ステップの角度差分を保存）
         
         const rv = () => Math.random() - 0.5;
         this.maxL = Math.max(1, parseFloat(ui.lenB.value) + rv() * 2 * parseFloat(ui.lenV.value));
@@ -123,8 +108,6 @@ class Branch {
 
     update() {
         if (!this.active) return;
-
-        // 空間探索による回避ロジック
         let ax = 0, ay = 0;
         const gx = Math.floor(this.currX / cellSize), gy = Math.floor(this.currY / cellSize);
         for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
@@ -136,39 +119,29 @@ class Branch {
                 }
             }
         }
-
         const globalWind = parseFloat(ui.wind.value);
         const sf = swipeForce;
         const finalGrav = this.gEff * (sf > 0 ? 0.2 : (sf < 0 ? 3.5 : 1));
 
-        // ベクトル計算
         let vx = Math.cos(this.currAngle) * 2.2 + ax * 0.15 + globalWind;
         let vy = Math.sin(this.currAngle) * 2.2 + ay * 0.15 + finalGrav;
-
         if (swipePos) {
             let dx = this.currX - swipePos.x, dy = this.currY - swipePos.y, sd2 = dx*dx + dy*dy;
             if (sd2 < 18000) vy -= sf * (1 - Math.sqrt(sd2)/135) * 1.3;
         }
-
         let newAngle = Math.atan2(vy, vx);
         if (!isFinite(newAngle)) { this.active = false; return; }
 
-        // DNAに相対的な変化（角度の差分）を記録
-        const diffAngle = newAngle - this.currAngle;
-        this.dna.push(diffAngle);
-
-        // シミュレーション上の位置を更新
+        this.dna.push(newAngle - this.currAngle);
         this.currX += Math.cos(newAngle) * 2.2;
         this.currY += Math.sin(newAngle) * 2.2;
         this.currAngle = newAngle;
 
-        // グリッド登録
         if (this.age % 5 === 0) {
-            const key = `${Math.floor(this.currX/cellSize)},${Math.floor(this.currY/cellSize)}`;
+            const key = `${gx},${gy}`;
             if (!grid[key]) grid[key] = [];
             if (grid[key].length < 10) grid[key].push({x: this.currX, y: this.currY});
         }
-
         if (++this.age >= this.maxL) {
             this.active = false;
             if (this.gen < 15 && branches.length < 1800) {
@@ -179,245 +152,60 @@ class Branch {
     }
 
     split() {
-        const num = (this.gen < 3) ? 2 : (Math.random() > 0.88 ? 3 : 2);
         const bAng = parseFloat(ui.angleB.value) + (Math.random()-0.5) * 2 * parseFloat(ui.angleV.value);
+        const num = (this.gen < 3) ? 2 : (Math.random() > 0.88 ? 3 : 2);
         for (let i = 0; i < num; i++) {
             const a = this.currAngle + (i - (num-1)/2) * bAng + (Math.random()-0.5) * 0.4;
             branches.push(new Branch(this.currX, this.currY, a, this.gen + 1, this));
         }
     }
 
-    /**
-     * LookDev評価: DNAを現在のスライダー設定で解釈して描画する
-     */
     evaluateAndDraw() {
-        const gScale = parseFloat(ui.genScale.value);
-        const decay = parseFloat(ui.decay.value);
-        // 世代に応じた長さの係数
-        const lenMultiplier = gScale * Math.pow(decay, this.gen);
-        const stepLen = 2.2 * lenMultiplier;
-
-        // 親がいる場合は、親の「最終的な描画上の終点」を始点にする
+        // 親の終点を取得
         if (this.parent) {
-            // 親の描画結果を再帰的に取得するのは重いため、実際は簡易的に保持
-            // ここではデカップリングのデモとして絶対座標を補正
+            this.startX = this.parent.lastDrawX;
+            this.startY = this.parent.lastDrawY;
+            this.startAngle = this.parent.lastDrawAngle;
         }
 
-        let drawX = this.startX;
-        let drawY = this.startY;
-        let drawAngle = this.startAngle;
+        // トリム計算: 何世代目まで描画するか
+        const globalTrim = parseFloat(ui.trim.value);
+        let visibility = Math.max(0, Math.min(1, globalTrim - this.gen));
+        
+        // 可視性が0なら描画も更新もしない
+        if (visibility <= 0) {
+            this.lastDrawX = this.startX;
+            this.lastDrawY = this.startY;
+            this.lastDrawAngle = this.startAngle;
+            return;
+        }
 
+        const decay = parseFloat(ui.decay.value);
+        const stepLen = 2.2 * Math.pow(decay, this.gen);
+        const drawSteps = Math.floor(this.dna.length * visibility);
+
+        let dX = this.startX, dY = this.startY, dAngle = this.startAngle;
         const bT = parseFloat(ui.thick.value);
-        const sz = Math.max(0.2, bT * Math.pow(0.74, this.gen + (this.dna.length / this.maxL)));
+        const sz = Math.max(0.2, bT * Math.pow(0.74, this.gen + (drawSteps / this.maxL)));
         const al = Math.min(0.8, Math.max(0.04, sz / 7 + 0.04));
 
         ctx.beginPath();
         ctx.lineWidth = sz;
         ctx.strokeStyle = hue === -1 ? `rgba(255,255,255,${al})` : `hsla(${hue}, 80%, ${Math.min(100, 40 + this.gen * 4)}%, ${al})`;
-        
-        ctx.moveTo(drawX, drawY);
+        ctx.moveTo(dX, dY);
 
-        // DNAを現在のパラメータで展開
-        for (let i = 0; i < this.dna.length; i++) {
-            drawAngle += this.dna[i];
-            drawX += Math.cos(drawAngle) * stepLen;
-            drawY += Math.sin(drawAngle) * stepLen;
-            
-            // 頂点削減（描画時も間引き）
-            if (i % 3 === 0 || i === this.dna.length - 1) {
-                ctx.lineTo(drawX, drawY);
-            }
+        for (let i = 0; i < drawSteps; i++) {
+            dAngle += this.dna[i];
+            dX += Math.cos(dAngle) * stepLen;
+            dY += Math.sin(dAngle) * stepLen;
+            if (i % 3 === 0 || i === drawSteps - 1) ctx.lineTo(dX, dY);
         }
         ctx.stroke();
 
-        // 子枝の始点を更新（重要：プロデューシャルな追従）
-        this.lastDrawX = drawX;
-        this.lastDrawY = drawY;
-        this.lastDrawAngle = drawAngle;
-    }
-}
-
-/**
- * 描画ツリーの整合性を保つための再帰的座標更新
- */
-function updateTreePositions() {
-    for (let b of branches) {
-        if (b.parent) {
-            b.startX = b.parent.lastDrawX;
-            b.startY = b.parent.lastDrawY;
-            // 枝分かれ時の角度の整合性は、今回はシミュレーション時のcurrAngle差分をDNAに含めるべきだが
-            // 簡易化のためstartX/Yの更新に留める
-        }
-    }
-}
-
-function init() {
-    dpr = window.devicePixelRatio || 1;
-    width = canvas.width = window.innerWidth * dpr;
-    height = canvas.height = window.innerHeight * dpr;
-    ctx.resetTransform(); ctx.scale(dpr, dpr);
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const uiH = document.getElementById('ui').offsetHeight;
-    
-    // シミュレーション開始
-    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 30, -Math.PI/2, 0)];
-    grid = {};
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-}
-
-function loop() {
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
-    // 1. シミュレーション（設計図の生成）
-    const it = Math.floor(parseFloat(ui.speed.value));
-    for (let i = 0; i < Math.max(0, it); i++) {
-        for (let j = 0; j < branches.length; j++) {
-            if (branches[j].active) branches[j].update();
-        }
-    }
-
-    // 2. 評価と描画（DNAの展開）
-    updateTreePositions(); 
-    for (let i = 0; i < branches.length; i++) {
-        branches[i].evaluateAndDraw();
-    }
-
-    // スワイプフィードバック
-    if (swipePos && Math.abs(swipeForce) > 0.05) {
-        const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 90);
-        g.addColorStop(0, `rgba(255,255,255,${Math.min(0.2, Math.abs(swipeForce)*0.12)})`);
-        g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(swipePos.x, swipePos.y, 90, 0, Math.PI*2); ctx.fill();
-    }
-    swipeForce *= 0.88; if (Math.abs(swipeForce) < 0.02) { swipePos = null; swipeForce = 0; }
-    
-    requestAnimationFrame(loop);
-}
-
-// UI Helpers
-function showTab(id) {
-    document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelector(`button[onclick="showTab('${id}')"]`).classList.add('active');
-    document.getElementById(id).classList.add('active');
-}
-
-function sync(m) {
-    const v = parseFloat(ui[m === 'gs' ? 'mGrowS' : m === 'gr' ? 'mGrowR' : m === 'cs' ? 'mCurveS' : 'mCurveR'].value);
-    if(m === 'gs') { ui.lenB.value = v * 100; ui.genB.value = 4 + v * 11; ui.deathB.value = v * 0.2; }
-    if(m === 'gr') { ui.lenV.value = v * 50; ui.genV.value = v * 3; ui.deathV.value = v * 0.4; ui.gravV.value = v * 0.15; }
-    if(m === 'cs') { ui.angleB.value = 0.1 + v * 2.4; ui.avoidB.value = v * 120; }
-    if(m === 'cr') { ui.angleV.value = v * 1.5; ui.avoidV.value = v * 60; }
-    init();
-}
-
-function gacha() {
-    const curT = ui.thick.value;
-    document.querySelectorAll('#ui input[type=range]').forEach(i => {
-        if(['thick','speed','genScale','decay','curviness'].includes(i.id)) return;
-        i.value = (Math.random() * (i.max - i.min)) + parseFloat(i.min);
-    });
-    ui.thick.value = curT; init();
-}
-
-function cycleColor() { hue = colors[++colorIdx % colors.length]; }
-let colorIdx = 0, bPIdx = 0;
-function cycleBranchPreset() {
-    ui.mGrowS.value = Math.random(); ui.mGrowR.value = Math.random();
-    ui.mCurveS.value = Math.random(); ui.mCurveR.value = Math.random();
-    ['gs','gr','cs','cr'].forEach(sync);
-}
-function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v2.png';
-    link.href = canvas.toDataURL('image/png'); link.click();
-}
-
-const hM = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.6; };
-let lY = 0;
-window.addEventListener('touchstart', e => lY = e.touches[0].clientY, { passive: false });
-window.addEventListener('touchmove', e => {
-    const y = e.touches[0].clientY; hM(e.touches[0].clientX, y, lY - y); lY = y;
-}, { passive: false });
-window.addEventListener('mousedown', e => lY = e.clientY);
-window.addEventListener('mousemove', e => { if (e.buttons > 0) { hM(e.clientX, e.clientY, lY - e.clientY); lY = e.clientY; } });
-window.addEventListener('resize', () => setTimeout(init, 200));
-window.onload = init; loop();
-</script>
-</body>
-</html>
-
-        let ax = 0, ay = 0;
-        const gx = Math.floor(this.x / cellSize), gy = Math.floor(this.y / cellSize);
-        for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
-            const cell = grid[`${gx+i},${gy+j}`];
-            if (cell) for(let p of cell) {
-                let dx = this.x - p.x, dy = this.y - p.y, d2 = dx*dx + dy*dy;
-                if (d2 < this.avD*this.avD && d2 > 0.2) {
-                    let d = Math.sqrt(d2); ax += dx/d; ay += dy/d;
-                }
-            }
-        }
-
-        const globalWind = parseFloat(ui.wind.value);
-        const sf = swipeForce;
-        const finalGrav = this.gEff * (sf > 0 ? 0.2 : (sf < 0 ? 3.5 : 1));
-        
-        this.vx += ax * 0.15 + globalWind;
-        this.vy += ay * 0.15 + finalGrav;
-        
-        if (swipePos) {
-            let dx = this.x - swipePos.x, dy = this.y - swipePos.y, sd2 = dx*dx + dy*dy;
-            if (sd2 < 18000) this.vy -= sf * (1 - Math.sqrt(sd2)/135) * 1.3;
-        }
-
-        let mag = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
-        if (!isFinite(mag) || mag < 0.001) { this.active = false; return; }
-        if (mag > 10) { this.vx *= 0.5; this.vy *= 0.5; mag *= 0.5; }
-
-        this.vx = (this.vx/mag) * 2.3; this.vy = (this.vy/mag) * 2.3;
-        this.x += this.vx; this.y += this.vy;
-
-        const lp = this.history[this.history.length-1];
-        if ((this.x - lp.x)**2 + (this.y - lp.y)**2 > 30) this.history.push({x: this.x, y: this.y});
-
-        if (this.age % 5 === 0) {
-            const key = `${Math.floor(this.x/cellSize)},${Math.floor(this.y/cellSize)}`;
-            if (!grid[key]) grid[key] = [];
-            if (grid[key].length < 12) grid[key].push({x: this.x, y: this.y});
-        }
-
-        if (++this.age >= this.maxL) {
-            this.active = false;
-            if (this.gen < 15 && branches.length < 1800) {
-                let prob = this.dProb * (sf > 0 ? 0.1 : (sf < 0 ? 6 : 1));
-                if (this.gen < 3 || Math.random() > prob) this.split();
-            }
-        }
-    }
-
-    split() {
-        const num = (this.gen < 3) ? 2 : (Math.random() > 0.88 ? 3 : 2);
-        const bAng = parseFloat(ui.angleB.value) + (Math.random()-0.5) * 2 * parseFloat(ui.angleV.value);
-        for (let i = 0; i < num; i++) {
-            const a = (i - (num-1)/2) * bAng + (Math.random()-0.5) * 0.4;
-            const nx = this.vx * Math.cos(a) - this.vy * Math.sin(a);
-            const ny = this.vx * Math.sin(a) + this.vy * Math.cos(a);
-            branches.push(new Branch(this.x, this.y, nx, ny, this.gen + 1));
-        }
-    }
-
-    draw() {
-        const prg = this.gen + (this.age / this.maxL);
-        const bT = parseFloat(ui.thick.value);
-        const sz = Math.max(0.2, bT * Math.pow(0.74, prg));
-        const al = Math.min(0.8, Math.max(0.04, sz / 7 + 0.04));
-        ctx.beginPath(); ctx.lineWidth = sz;
-        if (hue === -1) ctx.strokeStyle = `rgba(255,255,255,${al})`;
-        else ctx.strokeStyle = `hsla(${hue}, 80%, ${Math.min(100, 40 + this.gen * 4)}%, ${al})`;
-        ctx.moveTo(this.history[0].x, this.history[0].y);
-        for (let i=1; i<this.history.length; i++) ctx.lineTo(this.history[i].x, this.history[i].y);
-        ctx.lineTo(this.x, this.y); ctx.stroke();
+        // 描画上の終点を保存（子枝がここから始まる）
+        this.lastDrawX = dX;
+        this.lastDrawY = dY;
+        this.lastDrawAngle = dAngle;
     }
 }
 
@@ -426,17 +214,20 @@ function init() {
     width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
     ctx.resetTransform(); ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const uiH = document.getElementById('ui').offsetHeight;
-    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 30, 0, -3, 0)];
+    branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 30, -Math.PI/2, 0)];
     grid = {}; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    ui.trim.value = 15; // 初期化時はフル表示
 }
 
 function loop() {
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     const it = Math.floor(parseFloat(ui.speed.value));
-    for (let i = 0; i < Math.max(1, it); i++) {
-        for (let j=0; j<branches.length; j++) branches[j].update();
+    for (let i = 0; i < it; i++) {
+        for (let j = 0; j < branches.length; j++) if (branches[j].active) branches[j].update();
     }
-    for (let i=0; i<branches.length; i++) branches[i].draw();
+    // 全枝を順番に評価して描画（親から子の順なので整合性が保たれる）
+    for (let b of branches) b.evaluateAndDraw();
+    
     if (swipePos && Math.abs(swipeForce) > 0.05) {
         const g = ctx.createRadialGradient(swipePos.x, swipePos.y, 0, swipePos.x, swipePos.y, 90);
         g.addColorStop(0, `rgba(255,255,255,${Math.min(0.2, Math.abs(swipeForce)*0.12)})`);
@@ -452,7 +243,6 @@ function showTab(id) {
     document.querySelector(`button[onclick="showTab('${id}')"]`).classList.add('active');
     document.getElementById(id).classList.add('active');
 }
-
 function sync(m) {
     const v = parseFloat(ui[m === 'gs' ? 'mGrowS' : m === 'gr' ? 'mGrowR' : m === 'cs' ? 'mCurveS' : 'mCurveR'].value);
     if(m === 'gs') { ui.lenB.value = v * 100; ui.genB.value = 4 + v * 11; ui.deathB.value = v * 0.2; }
@@ -461,28 +251,25 @@ function sync(m) {
     if(m === 'cr') { ui.angleV.value = v * 1.5; ui.avoidV.value = v * 60; }
     init();
 }
-
 function gacha() {
     const curT = ui.thick.value;
     document.querySelectorAll('#ui input[type=range]').forEach(i => {
-        if(i.id === 'thick' || i.id === 'speed') return;
+        if(['thick','speed','trim','decay'].includes(i.id)) return;
         i.value = (Math.random() * (i.max - i.min)) + parseFloat(i.min);
     });
     ui.thick.value = curT; init();
 }
-
 function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+let colorIdx = 0, bPIdx = 0;
 function cycleBranchPreset() {
     ui.mGrowS.value = Math.random(); ui.mGrowR.value = Math.random();
     ui.mCurveS.value = Math.random(); ui.mCurveR.value = Math.random();
-    ui.wind.value = (Math.random() - 0.5) * 0.12; 
     ['gs','gr','cs','cr'].forEach(sync);
 }
 function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v1_3.png';
+    const link = document.createElement('a'); link.download = 'branch_v2_1.png';
     link.href = canvas.toDataURL('image/png'); link.click();
 }
-
 const hM = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.6; };
 let lY = 0;
 window.addEventListener('touchstart', e => lY = e.touches[0].clientY, { passive: false });
@@ -494,279 +281,5 @@ window.addEventListener('mousemove', e => { if (e.buttons > 0) { hM(e.clientX, e
 window.addEventListener('resize', () => setTimeout(init, 200));
 window.onload = init; loop();
 </script>
-</body>
-</html>
-                u_resolution: { value: new THREE.Vector2(width, height) },
-                u_ior: { value: 1.45 },
-                u_dispersion: { value: 0.12 },
-                u_shapeMix: { value: 0.0 }
-            };
-
-            // 3. シェーダーコード
-            const vertexShader = `
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    gl_Position = vec4(position, 1.0);
-                }
-            `;
-
-            const fragmentShader = `
-                precision highp float;
-                uniform vec2 u_resolution;
-                uniform float u_time;
-                uniform float u_ior;
-                uniform float u_dispersion;
-                uniform float u_shapeMix;
-                varying vec2 vUv;
-
-                // 形状：三角柱
-                float sdTriPrism(vec3 p, vec2 h) {
-                    vec3 q = abs(p);
-                    return max(q.z-h.y, max(q.x*0.866025+p.y*0.5, -p.y)-h.x*0.5);
-                }
-                // 形状：球
-                float sdSphere(vec3 p, float s) { return length(p) - s; }
-                // スムーズ結合
-                float smin(float a, float b, float k) {
-                    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-                    return mix(b, a, h) - k * h * (1.0 - h);
-                }
-
-                float getDist(vec3 p) {
-                    float s = sin(u_time * 0.5), c = cos(u_time * 0.5);
-                    p.xz *= mat2(c, -s, s, c);
-                    p.yz *= mat2(c, -s, s, c);
-
-                    float d1 = sdTriPrism(p, vec2(0.6, 0.4));
-                    float m1 = sdSphere(p - vec3(sin(u_time)*0.5, 0, 0), 0.35);
-                    float m2 = sdSphere(p - vec3(cos(u_time)*0.5, 0, 0), 0.35);
-                    float d2 = smin(m1, m2, 0.4);
-                    
-                    return mix(d1, d2, u_shapeMix);
-                }
-
-                vec3 getNormal(vec3 p) {
-                    vec2 e = vec2(0.001, 0);
-                    return normalize(vec3(getDist(p+e.xyy)-getDist(p-e.xyy), getDist(p+e.yxy)-getDist(p-e.yxy), getDist(p+e.yyx)-getDist(p-e.yyx)));
-                }
-
-                // 背景色（屈折確認用のグリッド）
-                vec3 getBg(vec3 rd) {
-                    float grid = smoothstep(0.7, 0.8, sin(rd.x*15.0)*sin(rd.y*15.0));
-                    return mix(vec3(0.05, 0.05, 0.1), vec3(0.1, 0.4, 0.8), grid);
-                }
-
-                void main() {
-                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.y, u_resolution.x);
-                    vec3 ro = vec3(0, 0, -2.5);
-                    vec3 rd = normalize(vec3(uv, 1.2));
-                    
-                    float dO = 0.0;
-                    for(int i=0; i<80; i++) {
-                        float dS = getDist(ro + rd * dO);
-                        dO += dS;
-                        if(dS < 0.001 || dO > 10.0) break;
-                    }
-
-                    vec3 color = getBg(rd);
-
-                    if(dO < 10.0) {
-                        vec3 p = ro + rd * dO;
-                        vec3 n = getNormal(p);
-                        
-                        // 分光
-                        vec3 refr;
-                        refr.r = getBg(refract(rd, n, 1.0/(u_ior + u_dispersion))).r;
-                        refr.g = getBg(refract(rd, n, 1.0/u_ior)).g;
-                        refr.b = getBg(refract(rd, n, 1.0/(u_ior - u_dispersion))).b;
-                        
-                        float fres = pow(1.0 + dot(rd, n), 3.0);
-                        color = refr + fres * 0.4;
-                    }
-                    gl_FragColor = vec4(color, 1.0);
-                }
-            `;
-
-            // 4. メッシュ作成
-            const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-            scene.add(mesh);
-
-            // 5. ループ
-            function animate(time) {
-                uniforms.u_time.value = time * 0.001;
-                renderer.render(scene, camera);
-                requestAnimationFrame(animate);
-            }
-            animate(0);
-
-            debug.innerText = "Status: Running (Resolution: " + width + "x" + height + ")";
-
-            window.addEventListener('resize', () => {
-                const w = window.innerWidth;
-                const h = window.innerHeight;
-                renderer.setSize(w, h);
-                uniforms.u_resolution.value.set(w, h);
-                debug.innerText = "Status: Resized (" + w + "x" + h + ")";
-            });
-        };
-    </script>
-</body>
-</html>
-
-                vec3 getNormal(vec3 p) {
-                    vec2 e = vec2(0.001, 0);
-                    return normalize(vec3(getDist(p+e.xyy)-getDist(p-e.xyy), getDist(p+e.yxy)-getDist(p-e.yxy), getDist(p+e.yyx)-getDist(p-e.yyx)));
-                }
-
-                vec3 getBg(vec3 rd) {
-                    float g = smoothstep(0.8, 0.9, sin(rd.x*10.0)*sin(rd.y*10.0));
-                    return mix(vec3(0.05, 0.05, 0.1), vec3(0.2, 0.6, 1.0), g);
-                }
-
-                void main() {
-                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
-                    vec3 ro = vec3(0, 0, -2.0);
-                    vec3 rd = normalize(vec3(uv, 1.0));
-                    
-                    float dO = 0.0;
-                    for(int i=0; i<64; i++) {
-                        float dS = getDist(ro + rd * dO);
-                        dO += dS;
-                        if(dS < 0.001 || dO > 10.0) break;
-                    }
-
-                    vec3 col = getBg(rd);
-                    if(dO < 10.0) {
-                        vec3 p = ro + rd * dO;
-                        vec3 n = getNormal(p);
-                        
-                        vec3 refrR = refract(rd, n, 1.0/(u_ior + u_dispersion));
-                        vec3 refrG = refract(rd, n, 1.0/u_ior);
-                        vec3 refrB = refract(rd, n, 1.0/(u_ior - u_dispersion));
-                        
-                        col.r = getBg(refrR).r;
-                        col.g = getBg(refrG).g;
-                        col.b = getBg(refrB).b;
-                        
-                        float fres = pow(1.0 + dot(rd, n), 4.0);
-                        col += fres * 0.4;
-                    }
-                    gl_FragColor = vec4(col, 1.0);
-                }
-            `;
-
-            // 4. Material & Mesh
-            const material = new THREE.ShaderMaterial({
-                uniforms,
-                vertexShader,
-                fragmentShader
-            });
-
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-            scene.add(mesh);
-
-            log("Shaders compiled and Mesh added.");
-
-            // 5. Animation
-            function animate(time) {
-                uniforms.u_time.value = time * 0.001;
-                renderer.render(scene, camera);
-                requestAnimationFrame(animate);
-            }
-            animate(0);
-            log("Animation loop started.");
-
-            window.addEventListener('resize', () => {
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
-            });
-        };
-    </script>
-</body>
-</html>
-                if(dO < 10.0) {
-                    vec3 p = ro + rd * dO;
-                    vec3 n = getNormal(p);
-                    
-                    // 分光（Dispersion）
-                    vec3 col;
-                    float iorR = u_ior + u_dispersion;
-                    float iorG = u_ior;
-                    float iorB = u_ior - u_dispersion;
-
-                    vec3 refrR = refract(rd, n, 1.0/iorR);
-                    vec3 refrG = refract(rd, n, 1.0/iorG);
-                    vec3 refrB = refract(rd, n, 1.0/iorB);
-
-                    col.r = getBackground(refrR).r;
-                    col.g = getBackground(refrG).g;
-                    col.b = getBackground(refrB).b;
-
-                    // ライティング
-                    float fresnel = pow(1.0 + dot(rd, n), 5.0);
-                    float spec = pow(max(0.0, dot(reflect(normalize(vec3(1,2,-3)), n), rd)), 32.0);
-                    
-                    color = col * 0.8 + fresnel * 0.5 + spec * 0.4;
-                }
-
-                gl_FragColor = vec4(color, 1.0);
-            }
-        `;
-
-        // --- Main Logic ---
-        window.onload = () => {
-            document.getElementById('loading').style.display = 'none';
-
-            const scene = new THREE.Scene();
-            const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            const uniforms = {
-                u_time: { value: 0 },
-                u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-                u_ior: { value: 1.5 },
-                u_dispersion: { value: 0.1 },
-                u_smoothness: { value: 0.4 },
-                u_shapeMix: { value: 0.0 }
-            };
-
-            const geometry = new THREE.PlaneGeometry(2, 2);
-            const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
-            const mesh = new THREE.Mesh(geometry, material);
-            scene.add(mesh);
-
-            // --- GUI (lil-gui) ---
-            const gui = new lil.GUI();
-            const params = {
-                toPrism: () => { uniforms.u_shapeMix.value = 0.0; },
-                toMetaball: () => { uniforms.u_shapeMix.value = 1.0; }
-            };
-
-            gui.add(params, 'toPrism').name('▲ プリズムに切替');
-            gui.add(params, 'toMetaball').name('● メタボールに切替');
-            
-            const folder = gui.addFolder('パラメータ調整');
-            folder.add(uniforms.u_ior, 'value', 1.0, 2.5).name('屈折率(IOR)');
-            folder.add(uniforms.u_dispersion, 'value', 0.0, 0.2).name('分光(虹色)強度');
-            folder.add(uniforms.u_smoothness, 'value', 0.1, 0.8).name('融合のねっとり感');
-
-            function animate(time) {
-                uniforms.u_time.value = time * 0.001;
-                renderer.render(scene, camera);
-                requestAnimationFrame(animate);
-            }
-
-            window.addEventListener('resize', () => {
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
-            });
-
-            animate();
-        };
-    </script>
 </body>
 </html>
