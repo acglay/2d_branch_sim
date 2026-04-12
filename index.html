@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v3.8</title>
+    <title>2D Branching Sandbox v3.9</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -13,7 +13,7 @@
         #ui, #side-ui { z-index: 100; }
         #ui { 
             position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(25, 25, 25, 0.98); color: #eee; 
+            background: rgba(20, 20, 20, 0.98); color: #eee; 
             padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
             border-top: 1px solid #444; backdrop-filter: blur(25px);
         }
@@ -36,7 +36,7 @@
     </style>
 </head>
 <body>
-<div id="ver">ver 3.8 Balanced Sandbox</div>
+<div id="ver">ver 3.9 Post-Deform</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 
 <div id="side-ui">
@@ -61,19 +61,18 @@
     </div>
 
     <div id="basic" class="tab-content active">
-        <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="4"></div>
+        <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="10"></div>
         <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
-        <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="50" value="12"></div>
+        <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="60" value="18"></div>
+        <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-1.5" max="1.5" step="0.01" value="0"></div>
+        <div class="ctrl"><label>GRAV</label><input type="range" id="grav" min="-1.5" max="1.5" step="0.01" value="0.2"></div>
         <div class="ctrl"><label>DENSITY</label><input type="range" id="crowd" min="10" max="600" value="250" oninput="init()"></div>
-        <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-0.08" max="0.08" step="0.001" value="0" oninput="init()"></div>
         <div class="ctrl"><label>GROW_S</label><input type="range" id="mGrowS" min="0" max="1" step="0.01" value="0.3" oninput="sync('gs')"></div>
-        <div class="ctrl"><label>GROW_R</label><input type="range" id="mGrowR" min="0" max="1" step="0.01" value="0.3" oninput="sync('gr')"></div>
         <div class="ctrl"><label>CURVE_S</label><input type="range" id="mCurveS" min="0" max="1" step="0.01" value="0.4" oninput="sync('cs')"></div>
-        <div class="ctrl"><label>CURVE_R</label><input type="range" id="mCurveR" min="0" max="1" step="0.01" value="0.4" oninput="sync('cr')"></div>
     </div>
 
     <div id="growth" class="tab-content">
-        <div class="ctrl"><label>LEN_B</label><input type="range" id="lenB" min="5" max="150" value="40" oninput="init()"></div>
+        <div class="ctrl"><label>LEN_B</label><input type="range" id="lenB" min="5" max="150" value="45" oninput="init()"></div>
         <div class="ctrl"><label>LEN_V</label><input type="range" id="lenV" min="0" max="100" value="20" oninput="init()"></div>
         <div class="ctrl"><label>GEN_B</label><input type="range" id="genB" min="4" max="15" step="0.1" value="8" oninput="init()"></div>
         <div class="ctrl"><label>GEN_V</label><input type="range" id="genV" min="0" max="5" value="1" oninput="init()"></div>
@@ -144,7 +143,7 @@ class Branch {
             let d = (o.type === 'circle') ? Math.hypot(dx, dy) : Math.max(Math.abs(dx), Math.abs(dy));
             let margin = o.size + 20;
             if (d < margin) {
-                const push = (1 - d / margin) * 12.0;
+                const push = (1 - d / margin) * 15.0;
                 if (o.type === 'circle') { ox += (dx/d)*push; oy += (dy/d)*push; }
                 else { if (Math.abs(dx) > Math.abs(dy)) ox += (dx>0?push:-push); else oy += (dy>0?push:-push); }
             }
@@ -166,7 +165,194 @@ class Branch {
         if (this.gen >= 2 && dens > crowd) { this.active = false; return; }
 
         const rec = 0.45;
-        let vx = Math.cos(this.currAngle) * this.speed + ax * 0.12 + ox + Math.cos(goal) * rec + parseFloat(document.getElementById('wind').value);
+        let vx = Math.cos(this.currAngle) * this.speed + ax * 0.12 + ox + Math.cos(goal) * rec;
+        let vy = Math.sin(this.currAngle) * this.speed + ay * 0.12 + oy + Math.sin(goal) * rec + 0.02;
+        
+        let nA = Math.atan2(vy, vx);
+        this.dna.push(nA - this.currAngle);
+        this.currX += Math.cos(nA) * this.speed;
+        this.currY += Math.sin(nA) * this.speed;
+        const res = resolveCol(this.currX, this.currY);
+        this.currX = res.x; this.currY = res.y;
+        this.currAngle = nA;
+
+        if (this.age % 5 === 0) {
+            const k = `${gx},${gy}`;
+            if (!grid[k]) grid[k] = [];
+            if (grid[k].length < 25) grid[k].push({x: this.currX, y: this.currY});
+        }
+        if (++this.age >= this.maxL) {
+            this.active = false;
+            if (this.gen < this.limitGen && this.gen < 14) {
+                if (this.gen < 2 || Math.random() > this.deathChance) this.split();
+            }
+        }
+    }
+
+    split() {
+        const rv = () => Math.random() - 0.5;
+        const aB = parseFloat(document.getElementById('angleB').value) + rv() * 2 * parseFloat(document.getElementById('angleV').value);
+        const num = (this.gen < 2) ? 2 : (Math.random() > 0.9 ? 3 : 2);
+        for (let i = 0; i < num; i++) {
+            const a = this.currAngle + (i - (num-1)/2) * aB + rv() * 0.3;
+            branches.push(new Branch(this.currX, this.currY, a, this.gen + 1, this, this.speed * 0.96, this.initialGoal));
+        }
+    }
+
+    draw() {
+        if (this.parent) { 
+            this.startX = this.parent.lastDeformX; 
+            this.startY = this.parent.lastDeformY; 
+            this.startAngle = this.parent.lastDrawAngle; 
+        }
+        const vis = Math.max(0, Math.min(1, parseFloat(document.getElementById('trim').value) - this.gen));
+        if (vis <= 0) { 
+            this.lastDeformX = this.startX; this.lastDeformY = this.startY; this.lastDrawAngle = this.startAngle; return; 
+        }
+
+        const steps = Math.floor(this.dna.length * vis);
+        const thickBase = parseFloat(document.getElementById('thick').value);
+        const windParam = parseFloat(document.getElementById('wind').value);
+        const gravParam = parseFloat(document.getElementById('grav').value);
+        
+        let dX = this.startX, dY = this.startY, dA = this.startAngle;
+        let cumulativeDeformX = 0, cumulativeDeformY = 0;
+        
+        const chunks = 10;
+        const spc = Math.ceil(steps / chunks);
+
+        for (let c = 0; c < chunks; c++) {
+            const si = c * spc, ei = Math.min(steps, (c+1) * spc);
+            if (si >= steps) break;
+
+            const progress = (this.gen + (si / this.maxL));
+            const size = Math.max(0.1, thickBase * Math.pow(0.68, progress));
+            
+            // カラーロジック：しきい値(根元の30%)までは色をキープ、その後フェード
+            const threshold = thickBase * 0.3;
+            const brightnessScale = size > threshold ? 1.0 : Math.min(1.0, size / threshold + 0.1);
+            
+            ctx.beginPath(); ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            if (hue === -1) { const v = Math.floor(255 * brightnessScale); ctx.strokeStyle = `rgb(${v},${v},${v})`; }
+            else { const l = Math.min(100, (40 + this.gen * 4) * brightnessScale); ctx.strokeStyle = `hsl(${hue}, 80%, ${l}%)`; }
+
+            ctx.moveTo(dX, dY);
+            for (let i = si; i < ei; i++) {
+                dA += this.dna[i];
+                
+                // 後計算の変形：細いほど大きくしなる
+                const stiffness = Math.max(0.01, size / thickBase);
+                cumulativeDeformX += windParam * (1.0 / (stiffness * 20));
+                cumulativeDeformY += gravParam * (1.0 / (stiffness * 20));
+
+                let stepX = Math.cos(dA) * this.speed;
+                let stepY = Math.sin(dA) * this.speed;
+                
+                dX += stepX; dY += stepY;
+                
+                // 描画地点にデフォームを適用
+                let finalX = dX + cumulativeDeformX;
+                let finalY = dY + cumulativeDeformY;
+
+                // 障害物プロジェクション（デフォーム後にも適用）
+                const res = resolveCol(finalX, finalY);
+                ctx.lineTo(res.x, res.y);
+                
+                // 最終座標の保存（子枝のため）
+                if (i === ei - 1) {
+                    this.lastDeformX = res.x;
+                    this.lastDeformY = res.y;
+                }
+            }
+            ctx.stroke();
+        }
+        this.lastDrawAngle = dA;
+    }
+}
+
+function init() {
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr);
+    branches = []; grid = {};
+    branches.push(new Branch(window.innerWidth/2, window.innerHeight - 150, -Math.PI/2, 0, null, 2.5, -Math.PI/2));
+}
+
+function loop() {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    for (let o of obstacles) {
+        const isS = (o === selectedObs);
+        ctx.fillStyle = isS ? 'rgba(0, 150, 255, 0.4)' : 'rgba(100, 100, 100, 0.15)';
+        ctx.strokeStyle = isS ? '#0af' : 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = isS ? 3 : 1; ctx.beginPath();
+        if (o.type === 'circle') ctx.arc(o.x, o.y, o.size, 0, Math.PI*2);
+        else ctx.rect(o.x - o.size, o.y - o.size, o.size*2, o.size*2);
+        ctx.fill(); ctx.stroke();
+    }
+    const it = Math.floor(parseFloat(document.getElementById('speed').value));
+    for (let i = 0; i < it; i++) for (let b of branches) if (b.active) b.update();
+    for (let b of branches) b.draw();
+    if (launchStart && !isEditMode) {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(launchStart.x, launchStart.y); ctx.lineTo(launchStart.cx, launchStart.cy); ctx.stroke(); ctx.setLineDash([]);
+    }
+    requestAnimationFrame(loop);
+}
+
+const wrap = document.getElementById('cvs-wrap');
+const getP = (e) => { const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; };
+wrap.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2 && isEditMode && selectedObs) { lastPinchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); } else {
+        const p = getP(e);
+        if (isEditMode) {
+            const f = obstacles.slice().reverse().find(o => Math.hypot(o.x - p.x, o.y - p.y) < o.size + 30);
+            selectedObs = f || null; document.getElementById('btn-del').style.opacity = selectedObs ? "1" : "0.4";
+            if (selectedObs) dragOffset = { x: p.x - selectedObs.x, y: p.y - selectedObs.y };
+        } else { launchStart = { x: p.x, y: p.y, cx: p.x, cy: p.y }; }
+    }
+}, { passive: false });
+wrap.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches.length === 2 && isEditMode && selectedObs) {
+        const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        if (lastPinchDist > 0) selectedObs.size = Math.min(500, Math.max(10, selectedObs.size * (d / lastPinchDist)));
+        lastPinchDist = d;
+    } else {
+        const p = getP(e);
+        if (isEditMode && selectedObs && dragOffset) { selectedObs.x = p.x - dragOffset.x; selectedObs.y = p.y - dragOffset.y; }
+        else if (launchStart) { launchStart.cx = p.x; launchStart.cy = p.y; }
+    }
+}, { passive: false });
+wrap.addEventListener('touchend', () => {
+    if (launchStart && !isEditMode) {
+        const dx = launchStart.cx - launchStart.x, dy = launchStart.cy - launchStart.y;
+        if (Math.hypot(dx, dy) > 15) { const a = Math.atan2(dy, dx); branches.push(new Branch(launchStart.x, launchStart.y, a, 0, null, Math.min(6, Math.hypot(dx,dy)/20), a)); }
+    }
+    launchStart = null; dragOffset = null; lastPinchDist = 0;
+});
+
+function toggleGoalMode(e) { e.stopPropagation(); isSwipeGoal = !isSwipeGoal; document.getElementById('btn-goal').classList.toggle('active', isSwipeGoal); }
+function toggleEditMode(e) { e.stopPropagation(); isEditMode = !isEditMode; document.getElementById('btn-edit').classList.toggle('active', isEditMode); if(!isEditMode) { selectedObs = null; document.getElementById('btn-del').style.opacity = "0.4"; } }
+function addObstacle(type, e) { e.stopPropagation(); const o = { type, x: window.innerWidth/2, y: window.innerHeight/3, size: 70 }; obstacles.push(o); if(!isEditMode) toggleEditMode(e); selectedObs = o; document.getElementById('btn-del').style.opacity = "1"; }
+function deleteSelected(e) { e.stopPropagation(); if (selectedObs) { obstacles = obstacles.filter(o => o !== selectedObs); selectedObs = null; document.getElementById('btn-del').style.opacity = "0.4"; } }
+function showTab(id) { document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active')); document.getElementById('t-'+id).classList.add('active'); document.getElementById(id).classList.add('active'); }
+
+function sync(m) { 
+    const v = parseFloat(document.getElementById(m==='gs'?'mGrowS':'mCurveS').value);
+    if(m==='gs'){ document.getElementById('lenB').value=v*150; document.getElementById('genB').value=4+v*11; } 
+    else { document.getElementById('angleB').value=0.1+v*2.4; document.getElementById('avoidB').value=v*150; }
+    init(); 
+}
+function gacha() { 
+    document.querySelectorAll('#ui input').forEach(i => { 
+        if(['speed', 'trim', 'thick', 'crowd'].includes(i.id)) return;
+        i.value = (Math.random()*(parseFloat(i.max)-parseFloat(i.min)))+parseFloat(i.min); 
+    }); 
+    init();
+}
+function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+let colorIdx = 0;
+function savePNG() { c        let vx = Math.cos(this.currAngle) * this.speed + ax * 0.12 + ox + Math.cos(goal) * rec + parseFloat(document.getElementById('wind').value);
         let vy = Math.sin(this.currAngle) * this.speed + ay * 0.12 + oy + Math.sin(goal) * rec + 0.02;
         
         let nA = Math.atan2(vy, vx);
