@@ -3,47 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v3.4</title>
+    <title>2D Branching Sandbox v3.5</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
         #ver { position: absolute; top: 10px; left: 10px; color: #fff; opacity: 0.3; font-size: 10px; z-index: 5; pointer-events: none; }
         canvas { display: block; width: 100%; height: 100%; }
         
-        #ui, #side-ui { z-index: 50; }
+        #ui, #side-ui { z-index: 100; }
         #ui { 
             position: absolute; bottom: 0; left: 0; width: 100%;
-            background: rgba(15, 15, 15, 0.96); color: #eee; 
-            padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+            background: rgba(20, 20, 20, 0.95); color: #eee; 
+            padding: 10px 15px calc(15px + env(safe-area-inset-bottom));
             border-top: 1px solid #444; backdrop-filter: blur(20px);
         }
         
         #side-ui {
             position: absolute; right: 12px; top: 40%; transform: translateY(-50%);
-            display: flex; flex-direction: column; gap: 14px;
+            display: flex; flex-direction: column; gap: 12px;
         }
         .side-btn { 
-            width: 52px; height: 52px; background: rgba(45, 45, 45, 0.98); 
-            border: 2px solid #666; border-radius: 14px; color: #fff; 
+            width: 50px; height: 50px; background: rgba(40, 40, 40, 0.98); 
+            border: 2px solid #555; border-radius: 12px; color: #fff; 
             display: flex; align-items: center; justify-content: center; font-size: 24px;
-            cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.4);
         }
-        .side-btn.active { border-color: #0af; background: #046; box-shadow: 0 0 15px rgba(0, 170, 255, 0.6); }
+        .side-btn.active { border-color: #0af; background: #046; box-shadow: 0 0 15px rgba(0, 170, 255, 0.5); }
 
-        .tabs { display: flex; gap: 2px; margin-bottom: 8px; background: #222; border-radius: 6px; overflow: hidden; }
-        .tab-btn { flex: 1; padding: 10px; font-size: 10px; background: transparent; border: none; color: #888; font-weight: bold; }
+        .tabs { display: flex; gap: 2px; margin-bottom: 8px; background: #111; border-radius: 6px; overflow: hidden; }
+        .tab-btn { flex: 1; padding: 10px; font-size: 10px; background: transparent; border: none; color: #777; font-weight: bold; }
         .tab-btn.active { background: #333; color: #0af; }
-        .tab-content { display: none; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 4px 0; max-height: 220px; overflow-y: auto; }
+        .tab-content { display: none; grid-template-columns: 1fr 1fr; gap: 8px 16px; padding: 4px 0; max-height: 220px; overflow-y: auto; }
         .tab-content.active { display: grid; }
         .btns { grid-column: span 2; display: flex; gap: 10px; justify-content: center; padding-bottom: 8px; border-bottom: 1px solid #333; margin-bottom: 8px; }
-        button.action { background: #333; border: 1px solid #555; border-radius: 6px; padding: 8px 16px; color: #fff; font-size: 14px; min-width: 60px; }
+        button.action { background: #333; border: 1px solid #555; border-radius: 6px; padding: 8px 14px; color: #fff; font-size: 13px; }
         .ctrl { display: grid; grid-template-columns: 55px 1fr; align-items: center; gap: 6px; }
-        label { font-size: 10px; color: #aaa; text-align: right; font-weight: bold; text-transform: uppercase; }
-        input[type=range] { width: 100%; height: 24px; accent-color: #0af; margin: 0; cursor: pointer; }
+        label { font-size: 9px; color: #999; text-align: right; font-weight: bold; }
+        input[type=range] { width: 100%; height: 24px; accent-color: #0af; margin: 0; }
     </style>
 </head>
 <body>
-<div id="ver">ver 3.4 Fixed UI</div>
+<div id="ver">ver 3.5 Stable Core</div>
 <canvas id="cvs"></canvas>
 
 <div id="side-ui">
@@ -51,13 +51,13 @@
     <button class="side-btn" id="btn-edit" onpointerdown="toggleEditMode(event)">✋</button>
     <button class="side-btn" onpointerdown="addObstacle('circle', event)">🔴</button>
     <button class="side-btn" onpointerdown="addObstacle('rect', event)">🟦</button>
-    <button class="side-btn" onpointerdown="deleteSelected(event)" style="color: #ff5555;">🗑️</button>
+    <button class="side-btn" id="btn-del" onpointerdown="deleteSelected(event)" style="color: #ff4444; opacity: 0.4;">🗑️</button>
 </div>
 
 <div id="ui" onpointerdown="event.stopPropagation()">
     <div class="btns">
         <button class="action" onclick="cycleColor()">🎨</button>
-        <button class="action" onclick="gacha()">🎲 Random</button>
+        <button class="action" onclick="gacha()">🎲 Gacha</button>
         <button class="action" onclick="savePNG()">💾 Save</button>
         <button class="action" onclick="init()">🔄 Clear</button>
     </div>
@@ -70,7 +70,7 @@
     <div id="basic" class="tab-content active">
         <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="4"></div>
         <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
-        <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="30" value="8"></div>
+        <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="35" value="10"></div>
         <div class="ctrl"><label>DENSITY</label><input type="range" id="crowd" min="10" max="500" value="250"></div>
         <div class="ctrl"><label>GROW_S</label><input type="range" id="mGrowS" min="0" max="1" step="0.01" value="0.3" oninput="sync('gs')"></div>
         <div class="ctrl"><label>CURVE_S</label><input type="range" id="mCurveS" min="0" max="1" step="0.01" value="0.4" oninput="sync('cs')"></div>
@@ -91,15 +91,248 @@
 
 <script>
 const canvas = document.getElementById('cvs'), ctx = canvas.getContext('2d');
-const ui = {}; 
-// UIパーツの初期マッピングを確実に実行
-const mapUI = () => document.querySelectorAll('input').forEach(el => ui[el.id] = el);
 let width, height, dpr, branches = [], grid = {}, hue = -1, obstacles = [];
 let isEditMode = false, isSwipeGoal = true, selectedObs = null, dragOffset = null, launchStart = null;
 let lastPinchDist = 0;
 const cellSize = 60, colors = [-1, 140, 200, 280, 45, 10, 180, 310];
 
-function resolveCollision(x, y, radius = 0) {
+// 衝突解決 (SDF Projector)
+function resolveCol(x, y, radius = 0) {
+    let nx = x, ny = y;
+    for (let o of obstacles) {
+        let dx = nx - o.x, dy = ny - o.y;
+        if (o.type === 'circle') {
+            const d = Math.hypot(dx, dy);
+            if (d < o.size + radius) {
+                const a = Math.atan2(dy, dx);
+                nx = o.x + Math.cos(a) * (o.size + radius + 0.5);
+                ny = o.y + Math.sin(a) * (o.size + radius + 0.5);
+            }
+        } else {
+            const h = o.size + radius;
+            if (Math.abs(dx) < h && Math.abs(dy) < h) {
+                if (Math.abs(dx) > Math.abs(dy)) nx = o.x + (dx > 0 ? h + 0.5 : -h - 0.5);
+                else ny = o.y + (dy > 0 ? h + 0.5 : -h - 0.5);
+            }
+        }
+    }
+    return { x: nx, y: ny };
+}
+
+class Branch {
+    constructor(x, y, angle, gen, parent = null, initialSpeed = 2.2, initialGoal = null) {
+        const res = resolveCol(x, y); // 生成時に埋まっていたら押し出す
+        this.startX = res.x; this.startY = res.y; this.startAngle = angle;
+        this.gen = gen; this.parent = parent; this.active = true; this.age = 0;
+        this.currX = res.x; this.currY = res.y; this.currAngle = angle;
+        this.dna = []; this.speed = initialSpeed;
+        this.initialGoal = initialGoal !== null ? initialGoal : angle;
+        
+        const rv = () => Math.random() - 0.5;
+        this.maxL = Math.max(1, parseFloat(document.getElementById('lenB').value) + rv() * 20);
+    }
+
+    update() {
+        if (!this.active) return;
+        if (this.currX < -50 || this.currX > (width/dpr)+50 || this.currY < -50 || this.currY > (height/dpr)+50) { this.active = false; return; }
+
+        const goal = isSwipeGoal ? this.initialGoal : -Math.PI/2;
+        const crowd = parseFloat(document.getElementById('crowd').value);
+        const avdB = parseFloat(document.getElementById('avoidB').value);
+
+        let ox = 0, oy = 0;
+        for (let o of obstacles) {
+            let dx = this.currX - o.x, dy = this.currY - o.y;
+            let d = (o.type === 'circle') ? Math.hypot(dx, dy) : Math.max(Math.abs(dx), Math.abs(dy));
+            let margin = o.size + 25;
+            if (d < margin) {
+                const push = (1 - d / margin) * 15.0;
+                if (o.type === 'circle') { ox += (dx/d)*push; oy += (dy/d)*push; }
+                else { if (Math.abs(dx) > Math.abs(dy)) ox += (dx>0?push:-push); else oy += (dy>0?push:-push); }
+            }
+        }
+
+        let ax = 0, ay = 0, dens = 0;
+        const gx = Math.floor(this.currX / cellSize), gy = Math.floor(this.currY / cellSize);
+        for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
+            const cell = grid[`${gx+i},${gy+j}`];
+            if (cell) {
+                dens += cell.length;
+                for(let p of cell) {
+                    let dx = this.currX - p.x, dy = this.currY - p.y, d2 = dx*dx+dy*dy;
+                    if (d2 < avdB*avdB && d2 > 0.5) { let d = Math.sqrt(d2); ax += dx/d; ay += dy/d; }
+                }
+            }
+        }
+
+        if (this.gen >= 2 && dens > crowd) { this.active = false; return; }
+
+        const rec = 0.5;
+        let vx = Math.cos(this.currAngle) * this.speed + ax * 0.15 + ox + Math.cos(goal) * rec + parseFloat(document.getElementById('wind').value);
+        let vy = Math.sin(this.currAngle) * this.speed + ay * 0.15 + oy + Math.sin(goal) * rec + 0.02;
+        
+        let nA = Math.atan2(vy, vx);
+        this.dna.push(nA - this.currAngle);
+        this.currX += Math.cos(nA) * this.speed;
+        this.currY += Math.sin(nA) * this.speed;
+        const res = resolveCol(this.currX, this.currY);
+        this.currX = res.x; this.currY = res.y;
+        this.currAngle = nA;
+
+        if (this.age % 5 === 0) {
+            const k = `${gx},${gy}`;
+            if (!grid[k]) grid[k] = [];
+            if (grid[k].length < 30) grid[k].push({x: this.currX, y: this.currY});
+        }
+        if (++this.age >= this.maxL) {
+            this.active = false;
+            if (this.gen < parseFloat(document.getElementById('genB').value) && this.gen < 14) this.split();
+        }
+    }
+
+    split() {
+        const aB = parseFloat(document.getElementById('angleB').value);
+        const num = (this.gen < 2) ? 2 : (Math.random() > 0.9 ? 3 : 2);
+        for (let i = 0; i < num; i++) {
+            const a = this.currAngle + (i - (num-1)/2) * aB + (Math.random()-0.5) * 0.3;
+            branches.push(new Branch(this.currX, this.currY, a, this.gen + 1, this, this.speed * 0.95, this.initialGoal));
+        }
+    }
+
+    draw() {
+        if (this.parent) { 
+            const pr = resolveCol(this.parent.lastDrawX, this.parent.lastDrawY);
+            this.startX = pr.x; this.startY = pr.y; this.startAngle = this.parent.lastDrawAngle; 
+        }
+        const vis = Math.max(0, Math.min(1, parseFloat(document.getElementById('trim').value) - this.gen));
+        if (vis <= 0) { this.lastDrawX = this.startX; this.lastDrawY = this.startY; this.lastDrawAngle = this.startAngle; return; }
+
+        const steps = Math.floor(this.dna.length * vis);
+        const thick = parseFloat(document.getElementById('thick').value);
+        let dX = this.startX, dY = this.startY, dA = this.startAngle;
+        
+        const chunks = 5;
+        const spc = Math.ceil(steps / chunks);
+
+        for (let c = 0; c < chunks; c++) {
+            const si = c * spc, ei = Math.min(steps, (c+1) * spc);
+            if (si >= steps) break;
+            const size = Math.max(0.1, thick * Math.pow(0.72, this.gen + (si / this.maxL)));
+            const al = Math.min(0.8, size / 8 + 0.05);
+
+            ctx.beginPath(); ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.strokeStyle = hue === -1 ? `rgba(255,255,255,${al})` : `hsla(${hue}, 80%, ${Math.min(100, 40+this.gen*4)}%, ${al})`;
+            ctx.moveTo(dX, dY);
+            for (let i = si; i < ei; i++) {
+                dA += this.dna[i];
+                dX += Math.cos(dA) * this.speed; dY += Math.sin(dA) * this.speed;
+                const r = resolveCol(dX, dY); dX = r.x; dY = r.y;
+                ctx.lineTo(dX, dY);
+            }
+            ctx.stroke();
+        }
+        this.lastDrawX = dX; this.lastDrawY = dY; this.lastDrawAngle = dA;
+    }
+}
+
+function init() {
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr);
+    branches = []; grid = {};
+}
+
+function loop() {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    for (let o of obstacles) {
+        const isS = (o === selectedObs);
+        ctx.fillStyle = isS ? 'rgba(0, 170, 255, 0.4)' : 'rgba(255, 255, 255, 0.08)';
+        ctx.strokeStyle = isS ? '#0af' : 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = isS ? 3 : 1; ctx.beginPath();
+        if (o.type === 'circle') ctx.arc(o.x, o.y, o.size, 0, Math.PI*2);
+        else ctx.rect(o.x - o.size, o.y - o.size, o.size*2, o.size*2);
+        ctx.fill(); ctx.stroke();
+    }
+    const spd = Math.floor(parseFloat(document.getElementById('speed').value));
+    for (let i = 0; i < spd; i++) for (let b of branches) if (b.active) b.update();
+    for (let b of branches) b.draw();
+    if (launchStart && !isEditMode) {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(launchStart.x, launchStart.y); ctx.lineTo(launchStart.cx, launchStart.cy); ctx.stroke(); ctx.setLineDash([]);
+    }
+    requestAnimationFrame(loop);
+}
+
+// Interaction
+const getP = (e) => { const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; };
+
+window.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2 && isEditMode && selectedObs) {
+        lastPinchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    } else {
+        const p = getP(e);
+        if (isEditMode) {
+            const f = obstacles.slice().reverse().find(o => Math.hypot(o.x - p.x, o.y - p.y) < o.size + 30);
+            selectedObs = f || null;
+            document.getElementById('btn-del').style.opacity = selectedObs ? "1" : "0.4";
+            if (selectedObs) dragOffset = { x: p.x - selectedObs.x, y: p.y - selectedObs.y };
+        } else {
+            launchStart = { x: p.x, y: p.y, cx: p.x, cy: p.y };
+        }
+    }
+}, { passive: false });
+
+window.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && isEditMode && selectedObs) {
+        e.preventDefault();
+        const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        if (lastPinchDist > 0) selectedObs.size = Math.min(500, Math.max(10, selectedObs.size * (d / lastPinchDist)));
+        lastPinchDist = d;
+    } else {
+        const p = getP(e);
+        if (isEditMode && selectedObs && dragOffset) {
+            e.preventDefault(); selectedObs.x = p.x - dragOffset.x; selectedObs.y = p.y - dragOffset.y;
+        } else if (launchStart) {
+            e.preventDefault(); launchStart.cx = p.x; launchStart.cy = p.y;
+        }
+    }
+}, { passive: false });
+
+window.addEventListener('touchend', () => {
+    if (launchStart && !isEditMode) {
+        const dx = launchStart.cx - launchStart.x, dy = launchStart.cy - launchStart.y;
+        if (Math.hypot(dx, dy) > 15) {
+            const a = Math.atan2(dy, dx);
+            branches.push(new Branch(launchStart.x, launchStart.y, a, 0, null, Math.min(6, Math.hypot(dx,dy)/20), a));
+        }
+    }
+    launchStart = null; dragOffset = null; lastPinchDist = 0;
+});
+
+// Sidebar & Tabs
+function toggleGoalMode(e) { e.stopPropagation(); isSwipeGoal = !isSwipeGoal; document.getElementById('btn-goal').classList.toggle('active', isSwipeGoal); }
+function toggleEditMode(e) { e.stopPropagation(); isEditMode = !isEditMode; document.getElementById('btn-edit').classList.toggle('active', isEditMode); if(!isEditMode) { selectedObs = null; document.getElementById('btn-del').style.opacity = "0.4"; } }
+function addObstacle(type, e) { e.stopPropagation(); const o = { type, x: window.innerWidth/2, y: window.innerHeight/3, size: 70 }; obstacles.push(o); if(!isEditMode) toggleEditMode(e); selectedObs = o; document.getElementById('btn-del').style.opacity = "1"; }
+function deleteSelected(e) { e.stopPropagation(); if (selectedObs) { obstacles = obstacles.filter(o => o !== selectedObs); selectedObs = null; document.getElementById('btn-del').style.opacity = "0.4"; } }
+
+function showTab(id) { 
+    document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById('t-'+id).classList.add('active'); document.getElementById(id).classList.add('active'); 
+}
+function sync(m) { 
+    const v = parseFloat(document.getElementById(m==='gs'?'mGrowS':'mCurveS').value);
+    if(m==='gs'){ document.getElementById('lenB').value=v*120; document.getElementById('genB').value=4+v*11; } 
+    else { document.getElementById('angleB').value=0.1+v*2.4; document.getElementById('avoidB').value=v*150; }
+}
+function gacha() { document.querySelectorAll('#ui input').forEach(i => { if(['thick','speed','trim','crowd'].includes(i.id)) return; i.value = (Math.random()*(i.max-i.min))+parseFloat(i.min); }); }
+function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+let colorIdx = 0;
+function savePNG() { const link = document.createElement('a'); link.download = 'branch_v3_5.png'; link.href = canvas.toDataURL(); link.click(); }
+
+window.onload = () => { init(); loop(); };
+</script>
+</body>
+</html>
     let nx = x, ny = y;
     for (let obs of obstacles) {
         let dx = nx - obs.x, dy = ny - obs.y;
