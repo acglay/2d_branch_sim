@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v2.1</title>
+    <title>2D Branching Sandbox v2.2</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -29,7 +29,7 @@
     </style>
 </head>
 <body>
-<div id="ver">ver 2.1 Trim</div>
+<div id="ver">ver 2.2</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
@@ -43,11 +43,11 @@
         <button class="tab-btn active" onclick="showTab('basic')">BASIC</button>
         <button class="tab-btn" onclick="showTab('growth')">GROWTH</button>
         <button class="tab-btn" onclick="showTab('curve')">CURVE</button>
-        <button class="tab-btn" onclick="showTab('lookdev')">LOOKDEV</button>
     </div>
 
     <div id="basic" class="tab-content active">
         <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="4"></div>
+        <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
         <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="25" value="8"></div>
         <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-0.06" max="0.06" step="0.001" value="0"></div>
         <div class="ctrl"><label>GROW_S</label><input type="range" id="mGrowS" min="0" max="1" step="0.01" value="0.3" oninput="sync('gs')"></div>
@@ -73,11 +73,6 @@
         <div class="ctrl"><label>AVD_B</label><input type="range" id="avoidB" min="0" max="120" value="30" oninput="init()"></div>
         <div class="ctrl"><label>AVD_V</label><input type="range" id="avoidV" min="0" max="60" value="15" oninput="init()"></div>
     </div>
-
-    <div id="lookdev" class="tab-content">
-        <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
-        <div class="ctrl"><label>DECAY</label><input type="range" id="decay" min="0.5" max="1.2" step="0.01" value="1.0"></div>
-    </div>
 </div>
 
 <script>
@@ -91,7 +86,7 @@ class Branch {
         this.startX = x; this.startY = y; this.startAngle = angle;
         this.gen = gen; this.parent = parent; this.active = true; this.age = 0;
         this.currX = x; this.currY = y; this.currAngle = angle;
-        this.dna = []; // 設計図（各ステップの角度差分を保存）
+        this.dna = [];
         
         const rv = () => Math.random() - 0.5;
         this.maxL = Math.max(1, parseFloat(ui.lenB.value) + rv() * 2 * parseFloat(ui.lenV.value));
@@ -161,18 +156,15 @@ class Branch {
     }
 
     evaluateAndDraw() {
-        // 親の終点を取得
         if (this.parent) {
             this.startX = this.parent.lastDrawX;
             this.startY = this.parent.lastDrawY;
             this.startAngle = this.parent.lastDrawAngle;
         }
 
-        // トリム計算: 何世代目まで描画するか
         const globalTrim = parseFloat(ui.trim.value);
         let visibility = Math.max(0, Math.min(1, globalTrim - this.gen));
         
-        // 可視性が0なら描画も更新もしない
         if (visibility <= 0) {
             this.lastDrawX = this.startX;
             this.lastDrawY = this.startY;
@@ -180,8 +172,7 @@ class Branch {
             return;
         }
 
-        const decay = parseFloat(ui.decay.value);
-        const stepLen = 2.2 * Math.pow(decay, this.gen);
+        const stepLen = 2.2; // Decayなしの固定ステップ
         const drawSteps = Math.floor(this.dna.length * visibility);
 
         let dX = this.startX, dY = this.startY, dAngle = this.startAngle;
@@ -202,7 +193,6 @@ class Branch {
         }
         ctx.stroke();
 
-        // 描画上の終点を保存（子枝がここから始まる）
         this.lastDrawX = dX;
         this.lastDrawY = dY;
         this.lastDrawAngle = dAngle;
@@ -216,7 +206,7 @@ function init() {
     const uiH = document.getElementById('ui').offsetHeight;
     branches = [new Branch(window.innerWidth/2, window.innerHeight - uiH - 30, -Math.PI/2, 0)];
     grid = {}; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-    ui.trim.value = 15; // 初期化時はフル表示
+    ui.trim.value = 15;
 }
 
 function loop() {
@@ -225,7 +215,6 @@ function loop() {
     for (let i = 0; i < it; i++) {
         for (let j = 0; j < branches.length; j++) if (branches[j].active) branches[j].update();
     }
-    // 全枝を順番に評価して描画（親から子の順なので整合性が保たれる）
     for (let b of branches) b.evaluateAndDraw();
     
     if (swipePos && Math.abs(swipeForce) > 0.05) {
@@ -254,7 +243,7 @@ function sync(m) {
 function gacha() {
     const curT = ui.thick.value;
     document.querySelectorAll('#ui input[type=range]').forEach(i => {
-        if(['thick','speed','trim','decay'].includes(i.id)) return;
+        if(['thick','speed','trim'].includes(i.id)) return;
         i.value = (Math.random() * (i.max - i.min)) + parseFloat(i.min);
     });
     ui.thick.value = curT; init();
@@ -267,7 +256,7 @@ function cycleBranchPreset() {
     ['gs','gr','cs','cr'].forEach(sync);
 }
 function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v2_1.png';
+    const link = document.createElement('a'); link.download = 'branch_v2_2.png';
     link.href = canvas.toDataURL('image/png'); link.click();
 }
 const hM = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.6; };
