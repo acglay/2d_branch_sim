@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v2.5</title>
+    <title>2D Branching Sandbox v2.6</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -29,7 +29,7 @@
     </style>
 </head>
 <body>
-<div id="ver">ver 2.5 Strict</div>
+<div id="ver">ver 2.6 Organic</div>
 <div id="cvs-wrap"><canvas id="cvs"></canvas></div>
 <div id="ui">
     <div class="btns">
@@ -46,7 +46,7 @@
     </div>
 
     <div id="basic" class="tab-content active">
-        <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="10"></div>
+        <div class="ctrl"><label>SPD</label><input type="range" id="speed" min="0" max="10" step="0.1" value="4"></div>
         <div class="ctrl"><label>TRIM</label><input type="range" id="trim" min="0" max="15" step="0.01" value="15"></div>
         <div class="ctrl"><label>THICK</label><input type="range" id="thick" min="1" max="25" value="8"></div>
         <div class="ctrl"><label>WIND</label><input type="range" id="wind" min="-0.06" max="0.06" step="0.001" value="0" oninput="init()"></div>
@@ -72,7 +72,6 @@
         <div class="ctrl"><label>ANG_V</label><input type="range" id="angleV" min="0" max="1.5" step="0.1" value="0.4" oninput="init()"></div>
         <div class="ctrl"><label>AVD_B</label><input type="range" id="avoidB" min="0" max="120" value="30" oninput="init()"></div>
         <div class="ctrl"><label>AVD_V</label><input type="range" id="avoidV" min="0" max="60" value="15" oninput="init()"></div>
-        <div class="ctrl"><label>CROSS</label><input type="range" id="cross" min="0" max="1" step="0.01" value="0.1"></div>
     </div>
 </div>
 
@@ -80,7 +79,7 @@
 const canvas = document.getElementById('cvs'), ctx = canvas.getContext('2d');
 const ui = {}; document.querySelectorAll('input').forEach(el => ui[el.id] = el);
 let width, height, dpr, branches = [], grid = {}, swipePos = null, swipeForce = 0, hue = -1;
-const cellSize = 50, colors = [-1, 140, 200, 280, 45, 10, 180, 310];
+const cellSize = 60, colors = [-1, 140, 200, 280, 45, 10, 180, 310];
 
 class Branch {
     constructor(x, y, angle, gen, parent = null) {
@@ -105,49 +104,36 @@ class Branch {
     update() {
         if (!this.active) return;
 
-        // 1. 画面外判定：一ピクセルでも外に出たら即死 (厳密化)
-        if (this.currX < 0 || this.currX > width/dpr || this.currY < 0 || this.currY > height/dpr) {
-            this.active = false;
-            return;
+        // 画面外 culling は維持
+        const margin = 10;
+        if (this.currX < -margin || this.currX > (width/dpr)+margin || this.currY < -margin || this.currY > (height/dpr)+margin) {
+            this.active = false; return;
         }
 
         let ax = 0, ay = 0;
-        let density = 0;
         const gx = Math.floor(this.currX / cellSize), gy = Math.floor(this.currY / cellSize);
         
+        // 回避ロジックを元のマイルドなものへ戻す
         for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
-            const cellKey = `${gx+i},${gy+j}`;
-            const cell = grid[cellKey];
-            if (cell) {
-                density += cell.length;
-                for(let p of cell) {
-                    let dx = this.currX - p.x, dy = this.currY - p.y, d2 = dx*dx + dy*dy;
-                    if (d2 < this.avD*this.avD && d2 > 0.5) {
-                        let d = Math.sqrt(d2); ax += dx/d; ay += dy/d;
-                    }
+            const cell = grid[`${gx+i},${gy+j}`];
+            if (cell) for(let p of cell) {
+                let dx = this.currX - p.x, dy = this.currY - p.y, d2 = dx*dx + dy*dy;
+                if (d2 < this.avD*this.avD && d2 > 0.5) {
+                    let d = Math.sqrt(d2); ax += dx/d; ay += dy/d;
                 }
             }
-        }
-
-        // 2. 厳密な交差回避：密度が高い場所に突っ込みそうなら成長を止める
-        const crossStrict = parseFloat(ui.cross.value);
-        if (crossStrict > 0 && density > (20 * (1.1 - crossStrict))) {
-            this.active = false;
-            return;
         }
 
         const globalWind = parseFloat(ui.wind.value);
         const sf = swipeForce;
         const finalGrav = this.gEff * (sf > 0 ? 0.2 : (sf < 0 ? 3.5 : 1));
 
-        let vx = Math.cos(this.currAngle) * 2.2 + ax * 0.2 + globalWind;
-        let vy = Math.sin(this.currAngle) * 2.2 + ay * 0.2 + finalGrav;
-        
+        let vx = Math.cos(this.currAngle) * 2.2 + ax * 0.15 + globalWind;
+        let vy = Math.sin(this.currAngle) * 2.2 + ay * 0.15 + finalGrav;
         if (swipePos) {
             let dx = this.currX - swipePos.x, dy = this.currY - swipePos.y, sd2 = dx*dx + dy*dy;
             if (sd2 < 18000) vy -= sf * (1 - Math.sqrt(sd2)/135) * 1.3;
         }
-
         let newAngle = Math.atan2(vy, vx);
         if (!isFinite(newAngle)) { this.active = false; return; }
 
@@ -156,12 +142,13 @@ class Branch {
         this.currY += Math.sin(newAngle) * 2.2;
         this.currAngle = newAngle;
 
+        // 登録頻度を age % 5 に戻して計算負荷と反発を緩和
         if (this.age % 5 === 0) {
-            const key = `${gx},${gy}`;
+            const key = `${Math.floor(this.currX/cellSize)},${Math.floor(this.currY/cellSize)}`;
             if (!grid[key]) grid[key] = [];
-            if (grid[key].length < 15) grid[key].push({x: this.currX, y: this.currY});
+            if (grid[key].length < 12) grid[key].push({x: this.currX, y: this.currY});
         }
-        
+
         if (++this.age >= this.maxL) {
             this.active = false;
             if (this.gen < 15 && branches.length < 1800) {
@@ -186,14 +173,10 @@ class Branch {
             this.startY = this.parent.lastDrawY;
             this.startAngle = this.parent.lastDrawAngle;
         }
-
         const globalTrim = parseFloat(ui.trim.value);
         const visibility = Math.max(0, Math.min(1, globalTrim - this.gen));
-        
         if (visibility <= 0) {
-            this.lastDrawX = this.startX;
-            this.lastDrawY = this.startY;
-            this.lastDrawAngle = this.startAngle;
+            this.lastDrawX = this.startX; this.lastDrawY = this.startY; this.lastDrawAngle = this.startAngle;
             return;
         }
 
@@ -207,8 +190,7 @@ class Branch {
 
         ctx.beginPath();
         ctx.lineWidth = size;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
         ctx.strokeStyle = hue === -1 ? `rgba(255,255,255,${alpha})` : `hsla(${hue}, 80%, ${Math.min(100, 40 + this.gen * 4)}%, ${alpha})`;
         
         ctx.moveTo(dX, dY);
@@ -220,9 +202,7 @@ class Branch {
         }
         ctx.stroke();
 
-        this.lastDrawX = dX;
-        this.lastDrawY = dY;
-        this.lastDrawAngle = dAngle;
+        this.lastDrawX = dX; this.lastDrawY = dY; this.lastDrawAngle = dAngle;
     }
 }
 
@@ -283,7 +263,7 @@ function cycleBranchPreset() {
     ['gs','gr','cs','cr'].forEach(sync);
 }
 function savePNG() {
-    const link = document.createElement('a'); link.download = 'branch_v2_5.png';
+    const link = document.createElement('a'); link.download = 'branch_v2_6.png';
     link.href = canvas.toDataURL('image/png'); link.click();
 }
 const hM = (x, y, dy) => { swipePos = { x, y }; swipeForce = dy * 0.6; };
