@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2D Branching Sandbox v4.4</title>
+    <title>2D Branching Sandbox v4.5</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; font-family: sans-serif; }
@@ -28,7 +28,7 @@
     </style>
 </head>
 <body>
-<div id="ver">ver 4.4 Obstacle Pro</div>
+<div id="ver">ver 4.5 Spawn Safety</div>
 <canvas id="cvs"></canvas>
 <div id="event-layer"></div>
 
@@ -70,12 +70,16 @@
         <div class="ctrl"><label>LEN_B</label><input type="range" id="lenB" min="5" max="150" value="45" oninput="init()"></div>
         <div class="ctrl"><label>LEN_V</label><input type="range" id="lenV" min="0" max="100" value="20" oninput="init()"></div>
         <div class="ctrl"><label>GEN_B</label><input type="range" id="genB" min="4" max="15" step="0.1" value="8" oninput="init()"></div>
+        <div class="ctrl"><label>GEN_V</label><input type="range" id="genV" min="0" max="5" value="1" oninput="init()"></div>
         <div class="ctrl"><label>DTH_B</label><input type="range" id="deathB" min="0" max="0.5" step="0.01" value="0.05" oninput="init()"></div>
+        <div class="ctrl"><label>DTH_V</label><input type="range" id="deathV" min="0" max="0.5" step="0.01" value="0.1" oninput="init()"></div>
     </div>
 
     <div id="curve" class="tab-content">
         <div class="ctrl"><label>ANG_B</label><input type="range" id="angleB" min="0.1" max="2.5" step="0.1" value="0.8" oninput="init()"></div>
+        <div class="ctrl"><label>ANG_V</label><input type="range" id="angleV" min="0" max="1.5" step="0.1" value="0.4" oninput="init()"></div>
         <div class="ctrl"><label>AVD_B</label><input type="range" id="avoidB" min="0" max="150" value="40" oninput="init()"></div>
+        <div class="ctrl"><label>AVD_V</label><input type="range" id="avoidV" min="0" max="100" value="20" oninput="init()"></div>
     </div>
 </div>
 
@@ -95,12 +99,225 @@ function resolveCol(x, y, radius = 0) {
             const d = Math.hypot(dx, dy);
             if (d < o.size + radius) {
                 const a = Math.atan2(dy, dx);
-                nx = o.x + Math.cos(a) * (o.size + radius + 0.1);
-                ny = o.y + Math.sin(a) * (o.size + radius + 0.1);
+                nx = o.x + Math.cos(a) * (o.size + radius + 0.1); ny = o.y + Math.sin(a) * (o.size + radius + 0.1);
             }
         } else {
             const h = o.size + radius;
             if (Math.abs(dx) < h && Math.abs(dy) < h) {
+                if (Math.abs(dx) > Math.abs(dy)) nx = o.x + (dx > 0 ? h + 0.1 : -h - 0.1);
+                else ny = o.y + (dy > 0 ? h + 0.1 : -h - 0.1);
+            }
+        }
+    }
+    return { x: nx, y: ny };
+}
+
+class Branch {
+    constructor(x, y, angle, gen, parent = null, initialSpeed = 2.2, initialGoal = null) {
+        this.startX = x; this.startY = y; this.startAngle = angle;
+        this.gen = gen; this.parent = parent; this.active = true; this.age = 0;
+        this.currX = x; this.currY = y; this.currAngle = angle;
+        this.dna = []; this.speed = initialSpeed;
+        this.initialGoal = initialGoal !== null ? initialGoal : angle;
+        this.maxL = Math.max(1, parseFloat(document.getElementById('lenB').value) + (Math.random()-0.5)*2 * parseFloat(document.getElementById('lenV').value));
+    }
+    update() {
+        if (!this.active) return;
+        const goal = isSwipeGoal ? this.initialGoal : -Math.PI/2;
+        const crowd = parseFloat(document.getElementById('crowd').value);
+        const avdB = parseFloat(document.getElementById('avoidB').value);
+        let vx = Math.cos(this.currAngle) * this.speed;
+        let vy = Math.sin(this.currAngle) * this.speed;
+        for (let o of obstacles) {
+            let dx = this.currX - o.x, dy = this.currY - o.y;
+            let d = (o.type === 'circle') ? Math.hypot(dx, dy) : Math.max(Math.abs(dx), Math.abs(dy));
+            if (d < o.size + 20) {
+                let nx = (o.type === 'circle') ? dx/d : (Math.abs(dx)>Math.abs(dy) ? (dx>0?1:-1) : 0);
+                let ny = (o.type === 'circle') ? dy/d : (Math.abs(dx)<=Math.abs(dy) ? (dy>0?1:-1) : 0);
+                let dot = vx * nx + vy * ny;
+                if (dot < 0) { vx -= nx * dot; vy -= ny * dot; }
+                vx += nx * 6.0; vy += ny * 6.0;
+            }
+        }
+        let ax = 0, ay = 0, dens = 0;
+        const gx = Math.floor(this.currX / 60), gy = Math.floor(this.currY / 60);
+        for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
+            const cell = grid[`${gx+i},${gy+j}`];
+            if (cell) {
+                dens += cell.length;
+                for(let p of cell) {
+                    let d2 = (this.currX-p.x)**2 + (this.currY-p.y)**2;
+                    if (d2 < avdB**2 && d2 > 0.5) { let d = Math.sqrt(d2); ax += (this.currX-p.x)/d; ay += (this.currY-p.y)/d; }
+                }
+            }
+        }
+        if (this.gen >= 2 && dens > crowd) { this.active = false; return; }
+        vx += ax * 0.1 + Math.cos(goal) * 0.45; vy += ay * 0.1 + Math.sin(goal) * 0.45 + 0.02;
+        let nA = Math.atan2(vy, vx); this.dna.push(nA - this.currAngle);
+        this.currX += Math.cos(nA) * this.speed; this.currY += Math.sin(nA) * this.speed;
+        const res = resolveCol(this.currX, this.currY);
+        this.currX = res.x; this.currY = res.y; this.currAngle = nA;
+        if (this.age % 5 === 0) {
+            const k = `${gx},${gy}`;
+            if (!grid[k]) grid[k] = [];
+            grid[k].push({x: this.currX, y: this.currY});
+        }
+        if (++this.age >= this.maxL) {
+            this.active = false;
+            if (this.gen < parseFloat(document.getElementById('genB').value) && this.gen < 14) this.split();
+        }
+    }
+    split() {
+        const aB = parseFloat(document.getElementById('angleB').value);
+        for (let i = 0; i < (this.gen < 2 ? 2 : (Math.random() > 0.9 ? 3 : 2)); i++) {
+            const a = this.currAngle + (i - (this.gen < 2 ? 0.5 : 0.5)) * aB + (Math.random()-0.5) * 0.3;
+            branches.push(new Branch(this.currX, this.currY, a, this.gen + 1, this, this.speed * 0.96, this.initialGoal));
+        }
+    }
+    draw() {
+        if (this.parent) { this.startX = this.parent.lastDrawX; this.startY = this.parent.lastDrawY; this.startAngle = this.parent.lastDrawAngle; }
+        const vis = Math.max(0, Math.min(1, parseFloat(document.getElementById('trim').value) - this.gen));
+        if (vis <= 0) { this.lastDrawX = this.startX; this.lastDrawY = this.startY; this.lastDrawAngle = this.startAngle; return; }
+        const steps = Math.floor(this.dna.length * vis), thickBase = parseFloat(document.getElementById('thick').value), wind = parseFloat(document.getElementById('wind').value), grav = parseFloat(document.getElementById('grav').value);
+        let dX = this.startX, dY = this.startY, dA = this.startAngle;
+        const chunks = 10, spc = Math.ceil(steps / chunks);
+        for (let c = 0; c < chunks; c++) {
+            const si = c * spc, ei = Math.min(steps, (c+1) * spc); if (si >= steps) break;
+            const progress = (this.gen + (si / this.maxL)), size = Math.max(0.1, thickBase * Math.pow(0.68, progress));
+            const threshold = thickBase * 0.3, brightness = size > threshold ? 1.0 : Math.min(1.0, size / threshold + 0.1);
+            ctx.beginPath(); ctx.lineWidth = size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            if (hue === -1) { const v = Math.floor(255 * brightness); ctx.strokeStyle = `rgb(${v},${v},${v})`; }
+            else { const l = Math.min(100, (40 + this.gen * 4) * brightness); ctx.strokeStyle = `hsl(${hue}, 80%, ${l}%)`; }
+            ctx.moveTo(dX, dY);
+            for (let i = si; i < ei; i++) {
+                dA += this.dna[i];
+                const stiff = Math.max(0.01, size / thickBase);
+                let moveX = Math.cos(dA) * this.speed + (wind / (stiff * 25)), moveY = Math.sin(dA) * this.speed + (grav / (stiff * 25));
+                dX += moveX; dY += moveY;
+                const resolved = resolveCol(dX, dY);
+                dX = resolved.x; dY = resolved.y;
+                ctx.lineTo(dX, dY);
+            }
+            ctx.stroke();
+        }
+        this.lastDrawX = dX; this.lastDrawY = dY; this.lastDrawAngle = dA;
+    }
+}
+// --- END NO CHANGES ---
+
+function init() {
+    canvas = document.getElementById('cvs'); ctx = canvas.getContext('2d');
+    dpr = window.devicePixelRatio || 1;
+    width = canvas.width = window.innerWidth * dpr; height = canvas.height = window.innerHeight * dpr;
+    ctx.resetTransform(); ctx.scale(dpr, dpr);
+    branches = []; grid = {};
+    branches.push(new Branch(window.innerWidth/2, window.innerHeight - 350, -Math.PI/2, 0, null, 2.5, -Math.PI/2));
+}
+
+function loop() {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    for (let o of obstacles) {
+        ctx.fillStyle = (o === selectedObs) ? 'rgba(0, 150, 255, 0.4)' : 'rgba(100, 100, 100, 0.15)';
+        ctx.strokeStyle = (o === selectedObs) ? '#0af' : 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = (o === selectedObs) ? 3 : 1; ctx.beginPath();
+        if (o.type === 'circle') ctx.arc(o.x, o.y, o.size, 0, Math.PI*2);
+        else ctx.rect(o.x - o.size, o.y - o.size, o.size*2, o.size*2);
+        ctx.fill(); ctx.stroke();
+    }
+    const it = Math.floor(parseFloat(document.getElementById('speed').value));
+    for (let i = 0; i < it; i++) for (let b of branches) if (b.active) b.update();
+    for (let b of branches) b.draw();
+    if (launchStart && !isEditMode) {
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(launchStart.x, launchStart.y); ctx.lineTo(launchStart.cx, launchStart.cy); ctx.stroke();
+    }
+    requestAnimationFrame(loop);
+}
+
+function showTab(id) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.innerText.toLowerCase() === id));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === id));
+}
+function toggleGoalMode(e) { e.stopPropagation(); isSwipeGoal = !isSwipeGoal; document.getElementById('btn-goal').classList.toggle('active', isSwipeGoal); }
+function toggleEditMode(e) { e.stopPropagation(); isEditMode = !isEditMode; document.getElementById('btn-edit').classList.toggle('active', isEditMode); if(!isEditMode) selectedObs = null; }
+
+function addObstacle(type, e) { 
+    e.stopPropagation(); 
+    const uiHeight = 320; // UIパネルのおよその高さ
+    const sideMargin = 60;
+    const topMargin = 50;
+    
+    const newObs = { 
+        type, 
+        x: sideMargin + Math.random() * (window.innerWidth - sideMargin * 2), 
+        y: topMargin + Math.random() * (window.innerHeight - uiHeight - topMargin), 
+        size: 25 + Math.random() * 25
+    }; 
+    obstacles.push(newObs); 
+    selectedObs = newObs; 
+    if(!isEditMode) toggleEditMode(e); 
+    document.getElementById('btn-del').style.opacity = 1; 
+}
+
+function deleteSelected(e) { e.stopPropagation(); if (selectedObs) { obstacles = obstacles.filter(o => o !== selectedObs); selectedObs = null; document.getElementById('btn-del').style.opacity = 0.4; } }
+function sync(m) { const v = parseFloat(document.getElementById(m==='gs'?'mGrowS':m==='gr'?'mGrowR':m==='cs'?'mCurveS':'mCurveR').value); if(m==='gs'){ document.getElementById('lenB').value=v*150; document.getElementById('genB').value=4+v*11; } if(m==='gr'){ document.getElementById('lenV').value=v*100; document.getElementById('genV').value=v*5; } if(m==='cs'){ document.getElementById('angleB').value=0.1+v*2.4; document.getElementById('avoidB').value=v*150; } if(m==='cr'){ document.getElementById('angleV').value=v*1.5; document.getElementById('avoidV').value=v*100; } init(); }
+function gacha() { document.querySelectorAll('#ui input').forEach(i => { if(!['speed','trim','thick'].includes(i.id)) i.value = (Math.random()*(parseFloat(i.max)-parseFloat(i.min)))+parseFloat(i.min); }); init(); }
+function cycleColor() { hue = colors[++colorIdx % colors.length]; }
+function savePNG() { const link = document.createElement('a'); link.download = 'sandbox.png'; link.href = canvas.toDataURL(); link.click(); }
+
+window.addEventListener('load', () => {
+    init(); loop();
+    const el = document.getElementById('event-layer');
+    
+    el.addEventListener('pointerdown', (e) => {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const p = { x: e.clientX, y: e.clientY };
+        if (activePointers.size === 1) {
+            if (isEditMode) {
+                const f = obstacles.slice().reverse().find(o => Math.hypot(o.x - p.x, o.y - p.y) < o.size + 30);
+                selectedObs = f || null;
+                if (selectedObs) dragOffset = { x: p.x - selectedObs.x, y: p.y - selectedObs.y };
+                document.getElementById('btn-del').style.opacity = selectedObs ? 1 : 0.4;
+            } else { launchStart = { x: p.x, y: p.y, cx: p.x, cy: p.y }; }
+        } else if (activePointers.size === 2 && isEditMode && selectedObs) {
+            const pts = Array.from(activePointers.values());
+            lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            dragOffset = null;
+        }
+    });
+
+    el.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size === 1) {
+            const p = activePointers.get(e.pointerId);
+            if (isEditMode && selectedObs && dragOffset) {
+                // UIパネルの下にはドラッグできないように制限
+                selectedObs.x = Math.max(10, Math.min(window.innerWidth - 10, p.x - dragOffset.x));
+                selectedObs.y = Math.max(10, Math.min(window.innerHeight - 80, p.y - dragOffset.y));
+            } else if (launchStart) { launchStart.cx = p.x; launchStart.cy = p.y; }
+        } else if (activePointers.size === 2 && isEditMode && selectedObs) {
+            const pts = Array.from(activePointers.values());
+            const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            if (lastPinchDist > 0) {
+                selectedObs.size = Math.min(500, Math.max(10, selectedObs.size * (dist / lastPinchDist)));
+            }
+            lastPinchDist = dist;
+        }
+    });
+
+    const release = (e) => {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) lastPinchDist = 0;
+        if (activePointers.size === 0) {
+            if (launchStart && !isEditMode) {
+                const dx = launchStart.cx - launchStart.x, dy = launchStart.cy - launchStart.y;
+                if (Math.hypot(dx, dy) > 15) { 
+                    const a = Math.atan2(dy, dx); 
+                    branches.push(new Branch(launchStart.x, launchStart.y, a, 0, null, Math.min(6, Math.hypot(dx,dy)/20), a)); 
+                }
+            }
+             if (Math.abs(dx) < h && Math.abs(dy) < h) {
                 if (Math.abs(dx) > Math.abs(dy)) nx = o.x + (dx > 0 ? h + 0.1 : -h - 0.1);
                 else ny = o.y + (dy > 0 ? h + 0.1 : -h - 0.1);
             }
